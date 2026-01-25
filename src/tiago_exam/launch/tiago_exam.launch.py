@@ -85,7 +85,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('moveit')))
 
     tuck_arm = Node(package='tiago_exam',
-                    executable='tuck_arm.py',
+                    executable='tuck_arm',
                     emulate_tty=True,
                     output='both',
                     parameters=[{'use_sim_time': True}])

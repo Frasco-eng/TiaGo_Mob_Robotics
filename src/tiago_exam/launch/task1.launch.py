@@ -117,7 +117,7 @@ def generate_launch_description():
 
     # Tuck arm launch (load the tuck arm node to avoid collisions with the environment)
     tuck_arm = Node(package='tiago_exam',
-                    executable='tuck_arm.py',
+                    executable='tuck_arm',
                     emulate_tty=True,
                     output='both',
                     parameters=[{'use_sim_time': True}])
@@ -140,7 +140,7 @@ def generate_launch_description():
     # Sostituiamo il save_map_on_exit con il nostro Watcher Node
     map_watcher_node = Node(
         package='tiago_exam',
-        executable='map_saver_watcher.py',
+        executable='map_saver_watcher',
         parameters=[{
             'map_full_path': full_map_path,
             'use_sim_time': True

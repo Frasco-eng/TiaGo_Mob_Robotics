@@ -111,7 +111,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Tuck arm launch (load the tuck arm node to avoid collisions with the environment)
     tuck_arm = Node(package='tiago_exam',
-                    executable='tuck_arm.py',
+                    executable='tuck_arm',
                     emulate_tty=True,
                     output='both',
                     parameters=[{'use_sim_time': True}])
@@ -124,7 +124,7 @@ def launch_setup(context, *args, **kwargs):
     # Localization launch (load the localization node to perform AMCL localization)
     localization = Node(
         package='tiago_exam',
-        executable='localization.py',
+        executable='localization',
         emulate_tty=True,
         output='both',
         parameters=[{'use_sim_time': True}]
@@ -177,7 +177,7 @@ def launch_setup(context, *args, **kwargs):
     # # Il tuo nodo di ricerca custom
     # search_coordinator = Node(
     #     package='tiago_exam',
-    #     executable='marker_searcher.py',
+    #     executable='marker_searcher',
     #     emulate_tty=True,
     #     output='both',
     #     parameters=[{'use_sim_time': True}]
@@ -185,7 +185,7 @@ def launch_setup(context, *args, **kwargs):
 
     naive_explorer = Node(
         package='tiago_exam',
-        executable='naive_explorer.py',
+        executable='naive_explorer',
         emulate_tty=True,
         output='both',
         parameters=[{'use_sim_time': True, 'map_path': map_path}]
@@ -193,7 +193,7 @@ def launch_setup(context, *args, **kwargs):
 
     aruco_noter = Node(
         package='tiago_exam',
-        executable='aruco_noter.py',
+        executable='aruco_noter',
         emulate_tty=True,
         output='both',
         parameters=[{'use_sim_time': True}]
