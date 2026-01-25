@@ -27,7 +27,7 @@ setup(
             'map_saver_watcher = tiago_exam.map_saver_watcher:main',
             'localization = tiago_exam.localization:main',
             'marker_searcher = tiago_exam.marker_searcher:main',
-            'explorer = tiago_exam.naive_explorer:main',
+            'naive_explorer = tiago_exam.naive_explorer:main',
             'aruco_noter = tiago_exam.aruco_noter:main',
         ],
     },
