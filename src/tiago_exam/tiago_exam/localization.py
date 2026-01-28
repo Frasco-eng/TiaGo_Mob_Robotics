@@ -1,25 +1,37 @@
 #!/usr/bin/env python3
 
+##################################
+# Imports
+##################################
+# ROS2 Libraries
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from std_srvs.srv import Empty
+from std_msgs.msg import Bool
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
+
+# Python Libraries
 import time
 import numpy as np
 
-from std_msgs.msg import Bool
+##################################
+# Constatnts
+##################################
+ROTATION_VELOCITY = 1.0     # Radians per second 
+TWO_PI = 2 * np.pi          # Full rotation in radians
 
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
-
-ROTATION_VELOCITY = 1.0  # radians per second 
-TWO_PI = 2 * np.pi
-
+##################################
+# Global Localization Node
+##################################
 class GlobalLocalizationNode(Node):
     def __init__(self):
         super().__init__('global_localization_node')
         self.get_logger().info('Global Localization node started.')
 
-        # Configuration for the publisher
+        ##################################
+        # QoS Profile Setup
+        ##################################
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,         # Ensures message delivery
             durability=DurabilityPolicy.TRANSIENT_LOCAL,    # Keeps the last message for late subscribers
@@ -27,63 +39,115 @@ class GlobalLocalizationNode(Node):
             depth=1                                         # Depth of 1 for last message
         )
 
-
+        ##################################
         # Subscribers
+        ##################################
         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_callback, 10)
         self.tuck_complete_sub = self.create_subscription(Bool, '/arm_tuck_complete', self.tuck_callback, qos_profile)
 
+        ##################################
         # Publishers
+        ##################################
         self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.loc_complete_pub = self.create_publisher(Bool, '/localization_complete', qos_profile)
-
-        # Service Client for Global Localization
-        # This service tells AMCL: "I am lost, spread particles everywhere!"
+        
+        ##################################
+        # Service Clients
+        ##################################
         self.global_loc_client = self.create_client(Empty, '/reinitialize_global_localization')
 
-        # Initializations
-        # Threshold: We need a small variance to confirm we are found.
-        # Note: You might need to relax this (e.g., 0.1 or 0.2) if it never finishes.
-        self.covariance_threshold = 0.03 
+        ##################################
+        # Thresholds and Flags
+        ##################################
+        self.pos_threshold = 0.15  # Variance X e Y (square meters)
+        self.yaw_threshold = 0.10  # Variance Yaw (square radians)
         
         self.amcl_pose_received = False     # Flag to check if we received AMCL pose
         self.current_covariance = []        # Store the latest covariance
         self.tuck_complete_flag = False   # Flag to check if arm tuck is complete
 
+        ##################################
+        # Initialization Wait
+        ##################################
         self.get_logger().info('Waiting for AMCL service...')
         while not self.global_loc_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Service not available, waiting again...')
         self.get_logger().info('AMCL service available.')
 
-    def amcl_callback(self, msg):
+    ##################################
+    # Callbacks
+    ##################################
+    def amcl_callback(self, msg: PoseWithCovarianceStamped) -> None:
+        """
+        Callback for AMCL pose updates.
+        Updates the current covariance and sets the received flag.
+
+        Parameters
+        ----------
+        msg : PoseWithCovarianceStamped
+            The AMCL pose message containing covariance information.
+        """
+        # Raise flag
         self.amcl_pose_received = True
+
+        # Update covariance
         self.current_covariance = msg.pose.covariance
 
-    def tuck_callback(self, msg):
+    def tuck_callback(self, msg: Bool) -> None:
+        """
+        Callback for arm tuck status updates.
+        Updates the tuck complete flag.
+
+        Parameters
+        ----------
+        msg : Bool
+            The message indicating if the arm tuck is complete.
+        """
         self.tuck_complete_flag = msg.data
         if self.tuck_complete_flag:
             self.get_logger().info('Arm tuck complete signal received.')
 
-    def call_global_localization(self):
+    ##################################
+    # Localization Methods
+    ##################################
+    def call_global_localization(self) -> None:
+        """
+        Calls the global localization service to spread particles across the map.   
+        """
         self.get_logger().info('Calling Global Localization Service...')
         req = Empty.Request()
         future = self.global_loc_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         self.get_logger().info('Global Localization initialized. Particles are spread map-wide.')
 
-    def localization_process(self):
+    def localization_process(self) -> None:
+        """
+        Main localization process.
+        Rotates the robot and checks for localization convergence.
+        """
         # Call global localization to spread particles
         self.call_global_localization()
         
-        # Rotate until the particles converge
+        # Wait for arm tuck to complete
         self.get_logger().info('Checking for arm tuck status...')
         while rclpy.ok() and not self.tuck_complete_flag:
             self.get_logger().info('Waiting for arm tuck to complete before localizing...')
             rclpy.spin_once(self, timeout_sec=1.0)
             time.sleep(1.0)
-    
+        
+        MAX_ATTEMPTS_BEFORE_RESET = 5
+
+        # Start localization attempts
         attempt = 0  
+
         while rclpy.ok(): 
             self.get_logger().info(f'--- Localization Attempt {attempt+1} ---')
+
+            if attempt >= MAX_ATTEMPTS_BEFORE_RESET:
+                self.get_logger().warn(f'Failed for {attempt} times! Relaunching Global Localization to reset particles...')
+                self.call_global_localization()
+                attempt = 0  # Reset the counter to give new particles time to converge
+                time.sleep(1.0) # Small technical pause
             
             # Rotate to gather sensor data
             self.rotate()
@@ -105,13 +169,18 @@ class GlobalLocalizationNode(Node):
             
             attempt += 1
 
-    def rotate(self):
+    def rotate(self) -> None:
+        """
+        Rotates the robot 360 degrees in place to gather sensor data for localization.
+        Publishes velocity commands at a fixed frequency to ensure twist_mux compatibility.
+        """
+        # Create a Twist message for rotation
         vel_msg = Twist()
         vel_msg.angular.z = ROTATION_VELOCITY
         
         # Calculate duration based on speed
         duration = abs(TWO_PI / ROTATION_VELOCITY)
-        freq = 10.0  # Hz
+        freq = 10.0  # Frequency to publish commands (Hz)
         self.get_logger().info(f'Rotating for {duration:.2f} seconds at {freq} Hz...')
 
         # Use the ROS clock for simulation-accurate timing
@@ -132,30 +201,35 @@ class GlobalLocalizationNode(Node):
         self.get_logger().info('Rotation finished. Waiting for particles to settle...')
         time.sleep(1.0)
         
-    def stop(self):
+    def stop(self) -> None:
+        """
+        Stops the robot by publishing zero velocities.
+        """
         vel_msg = Twist()
         self.vel_pub.publish(vel_msg)
     
-    def check_covariance(self):
+    def check_covariance(self) -> bool:
+        """
+        Checks if the localization covariance has dropped below the threshold,
+        indicating successful localization.
+        """
         if not self.amcl_pose_received:
             self.get_logger().warn('No AMCL pose received yet.')
             return False
         
-        # In Global Localization, the covariance starts HUGE (e.g., 30.0)
-        # We wait for it to drop below our threshold.
-        # We look at x (idx 0) and y (idx 7) variance specifically.
-        # cov_x = self.current_covariance[0]
-        # cov_y = self.current_covariance[7]
-        # cov_yaw = self.current_covariance[35]
+        # Estrai varianze specifiche
+        var_x = self.current_covariance[0]
+        var_y = self.current_covariance[7]
+        var_yaw = self.current_covariance[35]
 
-        # Compute max metric
-        max_cov = np.max(self.current_covariance)
-        self.get_logger().info(f'Current Covariance (Max): {max_cov:.4f}')
+        self.get_logger().info(f'Var_x: {var_x:.4f}, Var_y: {var_y:.4f}, Var_yaw: {var_yaw:.4f}')
 
-        if max_cov < self.covariance_threshold:
+        # Compute metric
+        if (var_x < self.pos_threshold and 
+            var_y < self.pos_threshold and 
+            var_yaw < self.yaw_threshold):
             return True
-        else: 
-            return False
+        return False
     
 def main(args=None):
     rclpy.init(args=args)
@@ -172,140 +246,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
-# import rclpy
-# from rclpy.node import Node
-# from geometry_msgs.msg import PoseWithCovarianceStamped
-# from nav_msgs.msg import Odometry
-# from geometry_msgs.msg import Twist
-
-# import time
-# import numpy as np
-
-# ROTATION_VELOCITY = 0.5  # radians per second 
-# TWO_PI = 2 * np.pi
-
-# # AMCL: Adaptive Monte Carlo Localization
-
-# class LocalizationNode(Node):
-#     def __init__(self):
-#         super().__init__('localization_node')
-#         self.get_logger().info('Localization node has been started.')
-
-#         # Subscribers
-#         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_callback, 10)
-#         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-
-#         # Publishers
-#         self.amcl_pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initial_pose', 10)
-#         self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-
-#         # Initializations
-#         self.covariance_threshold = 0.07
-
-#         self.covariance_msg = PoseWithCovarianceStamped()
-#         self.covariance_values = [0.0] * 36 #PoseWithCovarianceStamped() 
-
-#         self.tiago_pose = [0.0, 0.0, 0.0]  # x, y, z
-#         self.tiago_orientation = [0.0, 0.0, 0.0, 1.0]  # quaternion x, y, z, w
-
-#         self.get_logger().info('Waiting for the initial position ...')
-
-#         # Spin once
-#         rclpy.spin_once(self, timeout_sec=1.0)
-
-#     def amcl_callback(self, msg):
-#         self.amcl_position = msg.pose.pose.position
-#         self.amcl_orientation = msg.pose.pose.orientation
-#         self.covariance_msg.pose.covariance = msg.pose.covariance
-
-#     def odom_callback(self, msg):
-#         x_o = msg.pose.pose.position.x
-#         y_o = msg.pose.pose.position.y
-#         z_o = msg.pose.pose.position.z
-#         w_o = msg.pose.pose.orientation.w
-
-#         cov = np.zeros(36, dtype=np.float64)
-#         cov[0] = 200  # x 
-#         cov[7] = 200  # y
-#         cov[35] = 1   # yaw
-#         self.covariance_values = cov
-
-#         self.tiago_orientation = [x_o, y_o, z_o, w_o]
-
-#     def pub_initial_pose(self):
-#         rclpy.spin_once(self, timeout_sec=1.0) # Spins each fcn once to get the latest data
-#         initial_pose_msg = PoseWithCovarianceStamped()
-#         initial_pose_msg.pose.pose.position.x = float(self.tiago_pose[0])
-#         initial_pose_msg.pose.pose.position.y = float(self.tiago_pose[1])
-#         initial_pose_msg.pose.pose.position.z = float(self.tiago_pose[2])
-
-#         initial_pose_msg.pose.pose.orientation.x = float(self.tiago_orientation[0])
-#         initial_pose_msg.pose.pose.orientation.y = float(self.tiago_orientation[1])
-#         initial_pose_msg.pose.pose.orientation.z = float(self.tiago_orientation[2])
-#         initial_pose_msg.pose.pose.orientation.w = float(self.tiago_orientation[3])
-
-#         if hasattr(self.covariance_values, 'tolist'):
-#             initial_pose_msg.pose.covariance = self.covariance_values.tolist()
-#         else:
-#             initial_pose_msg.pose.covariance = self.covariance_values
-
-#         initial_pose_msg.header.frame_id = 'map'
-
-#         initial_pose_msg.header.stamp = self.get_clock().now().to_msg()
-
-#         self.amcl_pose_pub.publish(initial_pose_msg)
-
-#     def localization(self):
-#         while True:
-#             self.get_logger().info('Localization in progress ...')
-#             self.rotate() # Rotate to gather sensor data
-#             rclpy.spin_once(self, timeout_sec=1.0) # Update the covariance message
-
-#             if self.check_covariance(): # Check if covariance is below threshold
-#                 self.get_logger().info('Localization successful!')
-#                 break
-        
-#     def rotate(self):
-#         vel_msg = Twist()
-#         vel_msg.angular.z = ROTATION_VELOCITY
-#         self.vel_pub.publish(vel_msg)
-#         self.get_logger().info(f'Publishing velocity command: {vel_msg}')
-#         time.sleep(abs(TWO_PI / ROTATION_VELOCITY)) # Rotate for a full circle
-#         self.stop()
-
-#     def stop(self):
-#         vel_msg = Twist()
-#         vel_msg.angular.z = 0.0
-#         vel_msg.linear.x = 0.0
-#         self.vel_pub.publish(vel_msg)
-#         self.get_logger().info(f'Publishing stop: {vel_msg}')
-    
-#     def check_covariance(self):
-#         covariance_values = self.covariance_msg.pose.covariance
-
-#         if np.max(covariance_values) < self.covariance_threshold:
-#             self.get_logger().info(f'Covariance below the threshold.')
-#             self.get_logger().info(f'Robot is sufficiently localized.')
-#             return True
-#         else: 
-#             self.get_logger().info(f'Covariance above the threshold.')
-#             return False
-    
-# def main(args=None):
-#     rclpy.init(args=args)
-
-#     node = LocalizationNode()
-#     time.sleep(5)
-
-#     node.pub_initial_pose()
-#     node.localization()
-
-#     node.destroy_node()
-#     rclpy.shutdown()
-    
-
-# if __name__ == '__main__':
-#     main()
-    
-    

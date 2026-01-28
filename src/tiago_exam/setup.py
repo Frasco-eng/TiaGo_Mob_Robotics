@@ -14,11 +14,12 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'maps'), glob('maps/*')),
         (os.path.join('share', package_name, 'config'), glob('config/*')),
+        (os.path.join('share', package_name, 'data'), glob('data/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Giulio',
-    description='Task esame TIAGo',
+    description='Exam Tasks TIAGo',
     license='Apache License 2.0',
     #tests_require=['pytest'],
     entry_points={
