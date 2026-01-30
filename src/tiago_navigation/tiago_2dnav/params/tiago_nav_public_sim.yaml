@@ -136,9 +136,9 @@ controller_server:
   ros__parameters:
     use_sim_time: true
     controller_frequency: 5.0 # Keep low (5.0) for allowing tiago to rotate properly
-    min_x_velocity_threshold: 0.05 # era 0.001
-    min_y_velocity_threshold: 0.05 # era 0.001
-    min_theta_velocity_threshold: 0.1 # era 0.01
+    min_x_velocity_threshold: 0.001 # era 0.001
+    min_y_velocity_threshold: 0.001 # era 0.001
+    min_theta_velocity_threshold: 0.001 # era 0.01
     failure_tolerance: 5.0
     progress_checker_plugin: "progress_checker"
     current_goal_checker: "general_goal_checker" # ADDED BY US
@@ -154,8 +154,8 @@ controller_server:
     # Goal checker parameters
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25      # Before was 0.3
-      yaw_goal_tolerance: 0.25    # Before was 6.28
+      xy_goal_tolerance: 0.15      # Before was 0.3
+      yaw_goal_tolerance: 0.15  # Before was 6.28
       stateful: True
     # DWB parameters
     FollowPath:    
@@ -164,42 +164,45 @@ controller_server:
       primary_controller: "dwb_core::DWBLocalPlanner"
       
       # 3. Shim-specific parameters
-      angular_dist_threshold: 0.2 # 45 degrees (Trigger rotation if error is larger than this)
+      angular_dist_threshold: 0.15 # 45 degrees (Trigger rotation if error is larger than this)
       forward_sampling_distance: 0.4 # Look 0.5m ahead on the path to find the target heading
       rotate_to_heading_angular_vel: 1.0 # How fast to rotate in place
       max_angular_accel: 1.5
       simulate_ahead_time: 0.5 # Check for collisions while rotating
-
+      #rotate_to_goal_heading : True  # Rotate to goal when within goal tolerances
       
       debug_trajectory_details: True
-
+    
+    # DWB Parameters (Only active while moving to XY)
       min_vel_x: 0.0   
       max_vel_x: 1.0
-      min_vel_theta: 0.2
+      min_vel_theta: -0.5
       max_vel_theta: 0.5
       
-
       min_speed_xy: 0.0
       max_speed_xy: 1.00
-      min_speed_theta: 0.2
+
+      # 4. ALLOW SLOW SPEEDS (So it doesn't stop prematurely)
+
+      min_speed_theta: 0.05
 
       acc_lim_x: 2.0      # Was 2.5
-      acc_lim_theta: 0.5  # Was 3.2s
+      acc_lim_theta: 2.0  # Was 3.2s
       decel_lim_x: -2.0   # Was -2.5
-      decel_lim_theta: -0.5 # Was -3.2
+      decel_lim_theta: -2.0 # Was -3.2
 
       vx_samples: 20
       vtheta_samples: 40 # 20
 
-      sim_time: 2.0 # 2.0
+      sim_time: 1.5 # 2.0
       
       linear_granularity: 0.05
       angular_granularity: 0.025
       transform_tolerance: 0.2
-      xy_goal_tolerance: 0.1
-      yaw_goal_tolerance: 0.20      # before was 0.25
-      trans_stopped_velocity: 0.25
-      #rot_stopped_velocity: 0.1
+      xy_goal_tolerance: 0.05
+      yaw_goal_tolerance: 0.05      # before was 0.25
+      trans_stopped_velocity: 0.01
+      rot_stopped_velocity: 0.01
       short_circuit_trajectory_evaluation: True
       stateful: True
 
@@ -212,14 +215,14 @@ controller_server:
       PathAlign.forward_point_distance: 0.1 # specifies the robot lookahead distance along the path
 
 
-      GoalDist.scale: 1.0 # 24.0 weights penalty to goal distance
-      GoalAlign.scale: 70.0 # 24.0 How much it should orient towards the goal if small it cares about local orientaation
-      GoalAlign.forward_point_distance: 0.0 #  0.1 lookahead distance to evaluate goal alignment
+      GoalDist.scale: 24.0 # 24.0 weights penalty to goal distance
+      GoalAlign.scale: 0.0 # 24.0 How much it should orient towards the goal if small it cares about local orientaation
+      GoalAlign.forward_point_distance: 0.1 #  0.1 lookahead distance to evaluate goal alignment
 
       
-      RotateToGoal.scale: 1.0 # 24.0 forces the robot to face towards the goal
-      RotateToGoal.slowing_factor: 10.0 # deceleration factor when approaching goal
-      RotateToGoal.lookahead_time: -1.0 #predict where the robot will be in time
+      RotateToGoal.scale: 10.0 # 24.0 forces the robot to face towards the goal
+      RotateToGoal.slowing_factor: 1.0 # deceleration factor when approaching goal
+      RotateToGoal.lookahead_time: 0.1 #predict where the robot will be in time
 
      
 global_costmap:

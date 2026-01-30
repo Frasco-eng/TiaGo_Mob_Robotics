@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import os
 from glob import glob
 
@@ -7,7 +7,7 @@ package_name = 'tiago_exam'
 setup(
     name=package_name,
     version='4.1.0',
-    packages=[package_name],
+    packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
@@ -24,12 +24,18 @@ setup(
     #tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            # General Nodes
             'tuck_arm = tiago_exam.tuck_arm:main',
-            'map_saver_watcher = tiago_exam.map_saver_watcher:main',
-            'localization = tiago_exam.localization:main',
-            'marker_searcher = tiago_exam.marker_searcher:main',
-            'naive_explorer = tiago_exam.naive_explorer:main',
-            'aruco_noter = tiago_exam.aruco_noter:main',
+            # Task 1 Nodes
+            'map_saver_watcher = tiago_exam.task1.map_saver_watcher:main',
+            # Task 2 Nodes
+            'localization = tiago_exam.task2.localization:main',
+            'naive_explorer = tiago_exam.task2.naive_explorer:main',
+            'aruco_noter = tiago_exam.task2.aruco_noter:main',
+            # Task 3 Nodes
+            'coordinator = tiago_exam.task3.coordinator:main',
+            'map_navigator = tiago_exam.task3.map_navigator:main',
+            'manipulator = tiago_exam.task3.manipulator:main',
         ],
     },
 )

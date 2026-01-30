@@ -1,4 +1,12 @@
+# ROS2 files
 build/
 install/
 log/
+
+# IDE files
 .vscode/
+
+# Python files
+__pycache__/
+*.py[cod]
+*$py.class
