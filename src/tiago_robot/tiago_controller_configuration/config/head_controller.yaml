@@ -1,6 +1,5 @@
 head_controller:
   ros__parameters:
-    ype: joint_trajectory_controller/JointTrajectoryController
     allow_nonzero_velocity_at_trajectory_end: false
     joints:
       - head_1_joint
