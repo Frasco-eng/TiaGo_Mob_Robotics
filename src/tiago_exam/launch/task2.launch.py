@@ -44,7 +44,8 @@ import random
 ##################################
 # Functions
 ##################################
-def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.5) -> list[float]:
+# TODO: trovare un modo per evitare di farci spawnare attaccati agli ostacoli, la clearance non funziona bene
+def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.7) -> list[float]:
     """
     Generates a random pose (x, y, theta) on the map defined by map_path,
     ensuring the pose is in free space with a specified clearance from obstacles.
@@ -182,6 +183,7 @@ def launch_setup(context, *args, **kwargs):
     world_name = LaunchConfiguration("world_name").perform(context)
 
     # Declare user home
+    # TODO: LOOK FOR GET_PACKAG_DIRECTORY
     user_home = os.path.expanduser('~')
     workspace_src_path = os.path.join(user_home, 'tiago_gh_ws/src/tiago_exam')
 
@@ -191,7 +193,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Data path
     data_dir = os.path.join(workspace_src_path, 'data')
-    marker_file_path = os.path.join(data_dir, 'found_markers.csv')
+    marker_file_path = os.path.join(data_dir, 'marker_locations.csv')
     
     # Coordinates generation
     # coordinates = [0.0, -1.3, 0.0, 0.0]  # Default coordinates if random generation fails

@@ -139,8 +139,14 @@ class NaiveExplorer(Node):
         ##################################
         # Class Parameters
         ##################################
-        self.map_path = self.declare_parameter('map_path', '/home/giulio/tiago_gh_ws/src/tiago_exam/maps/group29_env_map.yaml').get_parameter_value().string_value
-        self.marker_file_path = self.declare_parameter('marker_file_path', 'found_markers.csv').get_parameter_value().string_value
+        # Retrieve paths
+        ws_src_path = os.path.join(os.path.expanduser('~'), 'tiago_gh_ws/src/tiago_exam')
+        map_path_dir = os.path.join(ws_src_path, 'maps')
+        data_path_dir = os.path.join(ws_src_path, 'data')
+        
+        # Declare parameters fallback
+        self.map_path = self.declare_parameter('map_path', os.path.join(map_path_dir, 'group29_env_map.yaml')).get_parameter_value().string_value
+        self.marker_file_path = self.declare_parameter('marker_file_path', os.path.join(data_path_dir, 'marker_locations.csv')).get_parameter_value().string_value
         self._init_marker_file()
         
         ##################################
@@ -263,6 +269,9 @@ class NaiveExplorer(Node):
         future = self.nav_client.send_goal_async(goal)
 
         # Brief wait to ensure the goal has been sent
+        # TODO : It uses a timeout while which is not ideal, but avoids blocking the state machine indefinitely
+        # TODO : It would be better to implement a proper async wait with a callback, that for instance sets a flag when done
+        # TODO : Can be addressed by spinning the executor in a separate thread
         start = time.time()
         while not future.done():
             if time.time() - start > 2.0: return None
@@ -451,7 +460,6 @@ class NaiveExplorer(Node):
                 case State.TRACKING:
                     self.get_logger().info("--- State: TRACKING ---")
                     self.get_logger().info(f"Tracking: {self.target_marker_id}")
-                    time.sleep(0.5)
 
                     # Check if we have a valid target marker pose, otherwise return to EXPLORING
                     if not self.target_marker_pose:
@@ -479,7 +487,7 @@ class NaiveExplorer(Node):
                             dy = self.target_marker_pose.pose.position.y - current_active_goal.pose.position.y
                             dist_diff = math.sqrt(dx*dx + dy*dy)
                             
-                            # If the estimated position has changed by > 10cm, UPDATE THE GOAL!
+                            # If the estimated position has changed by > 5cm, UPDATE THE GOAL!
                             if dist_diff > 0.10: 
                                 self.get_logger().info(f"Refining Target (Correction: {dist_diff:.2f}m)...")
                                 current_active_goal = self.target_marker_pose
@@ -512,7 +520,7 @@ class NaiveExplorer(Node):
                     self.get_logger().info("--- State: INSPECTING ---")
 
                     # Move head down to inspect
-                    self.move_head(0.0, -0.8)
+                    self.move_head(0.0, -0.9)
 
                     # Wait a bit before saving for safety
                     time.sleep(2.0)
@@ -535,10 +543,15 @@ class NaiveExplorer(Node):
                     gh = self.send_nav_goal(self.home_pose)
 
                     if gh:
-                        res = gh.get_result_async().done()
-                        while not res:
+                        res_future = gh.get_result_async()
+                        while not res_future.done():
                             time.sleep(0.1)
-
+                        
+                        if res_future.result().status == GoalStatus.STATUS_SUCCEEDED:
+                            self.get_logger().info("Returned Home Successfully.")
+                        else:
+                            self.get_logger().error("Failed to Return Home.")
+                    
                     self.state = State.DONE
 
                 # --- DONE ---

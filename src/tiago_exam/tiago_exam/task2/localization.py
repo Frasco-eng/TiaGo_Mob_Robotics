@@ -59,8 +59,8 @@ class GlobalLocalizationNode(Node):
         ##################################
         # Thresholds and Flags
         ##################################
-        self.pos_threshold = 0.15  # Variance X e Y (square meters)
-        self.yaw_threshold = 0.10  # Variance Yaw (square radians)
+        self.pos_threshold = 0.07  # Variance X e Y (square meters)
+        self.yaw_threshold = 0.07  # Variance Yaw (square radians)
         
         self.amcl_pose_received = False     # Flag to check if we received AMCL pose
         self.current_covariance = []        # Store the latest covariance
