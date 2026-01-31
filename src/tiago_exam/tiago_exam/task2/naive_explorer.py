@@ -186,7 +186,7 @@ class NaiveExplorer(Node):
         # Create or overwrite the CSV file with headers
         try:
             with open(self.marker_file_path, 'w') as f:
-                f.write("timestamp,id,x,y,z\n")
+                f.write("timestamp,id,x,y,z,qx,qy,qz,qw\n")
             self.get_logger().info(f"File CSV initialized at: {self.marker_file_path}")
         except Exception as e:
             self.get_logger().error(f"Error initializing file: {e}")
@@ -347,26 +347,51 @@ class NaiveExplorer(Node):
         # Retrieve last valid pose
         pose = self.last_valid_real_pose
         if pose and self.target_marker_id:
-            # Extract position
-            x, y, z = pose.pose.position.x, pose.pose.position.y, pose.pose.position.z
+            # Extract Marker Pose
+            x = pose.pose.position.x
+            y = pose.pose.position.y
+            z = pose.pose.position.z
+            qx = pose.pose.orientation.x
+            qy = pose.pose.orientation.y
+            qz = pose.pose.orientation.z
+            qw = pose.pose.orientation.w
+
+            # Extract TargetMarker Pose
+            x_target = self.target_marker_pose.pose.position.x
+            y_target = self.target_marker_pose.pose.position.y
+            z_target = self.target_marker_pose.pose.position.z
+            qx_target = self.target_marker_pose.pose.orientation.x
+            qy_target = self.target_marker_pose.pose.orientation.y
+            qz_target = self.target_marker_pose.pose.orientation.z
+            qw_target = self.target_marker_pose.pose.orientation.w
 
             # Extract timestamp
             ts = datetime.datetime.now().strftime("%H:%M:%S")
 
             # Append to CSV file
             with open(self.marker_file_path, 'a') as f:
-                f.write(f"{ts},{self.target_marker_id},{x:.3f},{y:.3f},{z:.3f}\n")
+                f.write(f"{ts},{self.target_marker_id},{x:.3f},{y:.3f},{z:.3f},{qx:.3f},{qy:.3f},{qz:.3f},{qw:.3f}\n")
+                f.write(f"{ts},target_{self.target_marker_id},{x_target:.3f},{y_target:.3f},{z_target:.3f},{qx_target:.3f},{qy_target:.3f},{qz_target:.3f},{qw_target:.3f}\n")
             
             # Broadcast static TF
-            t = TransformStamped()
-            t.header.stamp = self.get_clock().now().to_msg()
-            t.header.frame_id = 'map'
-            t.child_frame_id = str(self.target_marker_id)
-            t.transform.translation.x = x
-            t.transform.translation.y = y
-            t.transform.translation.z = z
-            t.transform.rotation = pose.pose.orientation
-            self.tf_static_broadcaster.sendTransform([t])
+            t_marker = TransformStamped()
+            t_marker.header.stamp = self.get_clock().now().to_msg()
+            t_marker.header.frame_id = 'map'
+            t_marker.child_frame_id = str(self.target_marker_id)
+            t_marker.transform.translation.x = x
+            t_marker.transform.translation.y = y
+            t_marker.transform.translation.z = z
+            t_marker.transform.rotation = pose.pose.orientation
+
+            t_target = TransformStamped()
+            t_target.header.stamp = self.get_clock().now().to_msg()
+            t_target.header.frame_id = 'map'
+            t_target.child_frame_id = "target_" + str(self.target_marker_id)
+            t_target.transform.translation.x = x_target
+            t_target.transform.translation.y = y_target
+            t_target.transform.translation.z = z_target
+            t_target.transform.rotation = self.target_marker_pose.pose.orientation
+            self.tf_static_broadcaster.sendTransform([t_marker, t_target])
             
             self.found_markers.add(self.target_marker_id)
             self.get_logger().info(f"SAVED: {self.target_marker_id}")

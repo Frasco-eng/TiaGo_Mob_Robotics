@@ -225,10 +225,19 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
 
+    # Head Motion node (handles head movements)
+    head_motion = Node(
+        package='tiago_exam',
+        executable='head_motion',
+        emulate_tty=True,
+        output='both',
+        parameters=[{'use_sim_time': True}]
+    )
+
     event_handler_localization_pick_place = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=localization,
-            on_exit=[coordinator, map_navigator, manipulator],
+            on_exit=[coordinator, map_navigator, manipulator, head_motion],
         )
     )
 

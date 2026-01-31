@@ -35,7 +35,8 @@ setup(
             # Task 3 Nodes
             'coordinator = tiago_exam.task3.coordinator:main',
             'map_navigator = tiago_exam.task3.map_navigator:main',
-            'manipulator = tiago_exam.task3.manipulator:main',
+            'manipulator = tiago_exam.task3.manipulator_v2:main',          # CAMBIATO QUA
+            'head_motion = tiago_exam.task3.head_motion:main',
         ],
     },
 )

@@ -9,6 +9,8 @@ from rclpy.action import ActionClient
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
 from builtin_interfaces.msg import Duration
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 
 # Custom Service
 from exam_interfaces.srv import MoveHead
@@ -19,16 +21,18 @@ from exam_interfaces.srv import MoveHead
 class HeadMotionService(Node):
     def __init__(self):
         super().__init__('head_motion_service')
+
+        self.cb_group = ReentrantCallbackGroup()
         
         ##################################
         # Service Server
         ##################################
-        self.srv = self.create_service(MoveHead, 'move_head_srv', self.handle_move_head)
+        self.srv = self.create_service(MoveHead, 'move_head_srv', self.handle_move_head, callback_group=self.cb_group)
         
         ##################################
         # Action Client
         ##################################
-        self.head_client = ActionClient(self, FollowJointTrajectory, '/head_controller/follow_joint_trajectory')
+        self.head_client = ActionClient(self, FollowJointTrajectory, '/head_controller/follow_joint_trajectory', callback_group=self.cb_group)
 
         self.get_logger().info("Head Motion Service Ready.")
 
@@ -76,8 +80,11 @@ def main(args=None):
     rclpy.init(args=args)
     node = HeadMotionService()
 
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

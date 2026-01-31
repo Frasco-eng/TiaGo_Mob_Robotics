@@ -1,3 +1,5 @@
-timestamp,id,x,y,z
-13:00:39,aruco_place_marker_frame,0.253,-5.310,0.151
-13:02:37,aruco_pick_marker_frame,-2.595,-2.692,0.151
+timestamp,id,x,y,z,qx,qy,qz,qw
+17:05:38,aruco_pick_marker_frame,-2.716,-2.585,0.150,-0.011,0.707,0.010,0.707
+17:05:38,target_aruco_pick_marker_frame,-1.716,-2.555,0.000,0.000,0.000,1.000,-0.015
+17:10:06,aruco_place_marker_frame,0.221,-5.347,0.149,0.017,0.707,-0.017,0.707
+17:10:06,target_aruco_place_marker_frame,1.220,-5.395,0.000,0.000,0.000,1.000,0.024

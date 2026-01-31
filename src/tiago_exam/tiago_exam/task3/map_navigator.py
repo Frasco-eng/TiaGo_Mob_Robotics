@@ -7,6 +7,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 
 # Custom service
 from exam_interfaces.srv import StartNavigation
@@ -17,16 +19,18 @@ from exam_interfaces.srv import StartNavigation
 class MapNavigatorService(Node):
     def __init__(self):
         super().__init__('map_navigator_service')
+
+        self.cb_group = ReentrantCallbackGroup()
         
         ##################################
         # Service Server
         ##################################
-        self.srv = self.create_service(StartNavigation, 'start_nav_srv', self.handle_navigation)
+        self.srv = self.create_service(StartNavigation, 'start_nav_srv', self.handle_navigation, callback_group=self.cb_group)
         
         ##################################
         # Action Client
         ##################################
-        self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose', callback_group=self.cb_group)
 
         self.get_logger().info("Map Navigator Service Ready.")
 
@@ -34,7 +38,7 @@ class MapNavigatorService(Node):
     # Callbacks
     ##################################
     def handle_navigation(self, request, response):
-        self.get_logger().info(f"Navigation request received to pose: {request.pose}")
+        self.get_logger().info(f"Navigation request received to pose: {request.pose.pose.position.x:.2f}, {request.pose.pose.position.y:.2f}")
         
         # Check if Nav2 is available
         if not self.nav_client.wait_for_server(timeout_sec=5.0):
@@ -77,13 +81,17 @@ class MapNavigatorService(Node):
 ##################################
 def main(args=None):
     rclpy.init(args=args)
-    node = MapNavigatorService()
+    navigator = MapNavigatorService()
+    
+    executor = MultiThreadedExecutor()
+    executor.add_node(navigator)
+    
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
+        navigator.destroy_node()
         rclpy.shutdown()
 
 ##################################

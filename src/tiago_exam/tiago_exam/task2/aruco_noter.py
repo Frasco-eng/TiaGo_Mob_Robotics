@@ -96,8 +96,8 @@ class ArucoNoter(Node):
         real_pose_msg.header.frame_id = marker_frame_name # NOTE: this frame_id should be used by the explorer to identify the marker. The explorer knows it and after it will remap it to "map"
         self.real_marker_pub.publish(real_pose_msg)
 
-        # --- Approach Position Calculation (1m behind) ---
-        target_offset = kdl.Vector(0.0, 0.0, 1.0) # 1 meter ahead
+        # --- Approach Position Calculation (0.5m behind) ---
+        target_offset = kdl.Vector(0.0, 0.0, 0.5) # 0.5 meters ahead
         
         # Target position in Marker frame
         marker_T_target_kdl = kdl.Frame(kdl.Rotation.Identity(), target_offset)
