@@ -97,6 +97,10 @@ class Coordinator(Node):
     def __init__(self):
         super().__init__('coordinator')
 
+
+        ##################################
+        # Callback Group
+        ##################################
         self.callback_group = ReentrantCallbackGroup()
 
         ##################################

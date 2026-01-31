@@ -26,17 +26,18 @@ setup(
         'console_scripts': [
             # General Nodes
             'tuck_arm = tiago_exam.tuck_arm:main',
+            'map_navigator = tiago_exam.map_navigator:main',
+            'head_motion = tiago_exam.head_motion:main',
             # Task 1 Nodes
             'map_saver_watcher = tiago_exam.task1.map_saver_watcher:main',
             # Task 2 Nodes
             'localization = tiago_exam.task2.localization:main',
-            'naive_explorer = tiago_exam.task2.naive_explorer:main',
+            'naive_explorer = tiago_exam.task2.naive_explorer:main',        # DA CAMBIARE IN COORDINATOR_TASK2
             'aruco_noter = tiago_exam.task2.aruco_noter:main',
             # Task 3 Nodes
-            'coordinator = tiago_exam.task3.coordinator:main',
-            'map_navigator = tiago_exam.task3.map_navigator:main',
-            'manipulator = tiago_exam.task3.manipulator_v2:main',          # CAMBIATO QUA
-            'head_motion = tiago_exam.task3.head_motion:main',
+            'coordinator = tiago_exam.task3.coordinator:main',              # DA CAMBIARE IN COORDINATOR_TASK3
+            'manipulator = tiago_exam.task3.manipulator_v2:main',           # CAMBIATO QUA
+            
         ],
     },
 )

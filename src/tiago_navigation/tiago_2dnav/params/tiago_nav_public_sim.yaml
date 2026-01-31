@@ -138,7 +138,7 @@ controller_server:
     controller_frequency: 5.0 # Keep low (5.0) for allowing tiago to rotate properly
     min_x_velocity_threshold: 0.001 # era 0.001
     min_y_velocity_threshold: 0.001 # era 0.001
-    min_theta_velocity_threshold: 0.001 # era 0.01
+    min_theta_velocity_threshold: 0.05 # era 0.01
     failure_tolerance: 5.0
     progress_checker_plugin: "progress_checker"
     current_goal_checker: "general_goal_checker" # ADDED BY US
@@ -166,10 +166,10 @@ controller_server:
       # 3. Shim-specific parameters
       angular_dist_threshold: 0.15 # 45 degrees (Trigger rotation if error is larger than this)
       forward_sampling_distance: 0.4 # Look 0.5m ahead on the path to find the target heading
-      rotate_to_heading_angular_vel: 1.0 # How fast to rotate in place
-      max_angular_accel: 1.5
+      rotate_to_heading_angular_vel: 0.5 # How fast to rotate in place
+      max_angular_accel: 2.0
       simulate_ahead_time: 0.5 # Check for collisions while rotating
-      #rotate_to_goal_heading : True  # Rotate to goal when within goal tolerances
+      rotate_to_goal_heading : True  # Rotate to goal when within goal tolerances
       
       debug_trajectory_details: True
     
@@ -218,7 +218,6 @@ controller_server:
       GoalDist.scale: 24.0 # 24.0 weights penalty to goal distance
       GoalAlign.scale: 0.0 # 24.0 How much it should orient towards the goal if small it cares about local orientaation
       GoalAlign.forward_point_distance: 0.1 #  0.1 lookahead distance to evaluate goal alignment
-
       
       RotateToGoal.scale: 0.0 # 24.0 forces the robot to face towards the goal
       RotateToGoal.slowing_factor: 1.0 # deceleration factor when approaching goal

@@ -39,13 +39,14 @@ import numpy as np
 import cv2
 import yaml
 import math
+import time
 import random
 
 ##################################
 # Functions
 ##################################
 # TODO: trovare un modo per evitare di farci spawnare attaccati agli ostacoli, la clearance non funziona bene
-def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.7) -> list[float]:
+def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.2) -> list[float]:
     """
     Generates a random pose (x, y, theta) on the map defined by map_path,
     ensuring the pose is in free space with a specified clearance from obstacles.
@@ -64,6 +65,8 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
     list of float
         Random pose [x, y, z, theta] in world coordinates.
     """
+    random.seed(time.time())
+    
     print(f"Generating random pose from map: {map_path} with clearance {clearance}m")
     try: 
         # Load map YAML
@@ -84,11 +87,11 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         _, binary_map = cv2.threshold(img, 250, 255, cv2.THRESH_BINARY)
 
         # Compute erosion to ensure clearance
-        kernel = np.ones((7, 7), np.uint8)
-        binary_map = cv2.erode(binary_map, kernel, iterations=3) 
+        # kernel = np.ones((3, 3), np.uint8)
+        # binary_map = cv2.erode(binary_map, kernel, iterations=3) 
 
         # Compute Distance Transform
-        dist_map = cv2.distanceTransform(binary_map, cv2.DIST_L2, 5)
+        dist_map = cv2.distanceTransform(binary_map, cv2.DIST_L2, 2)
 
         # Convert clearance from meters to pixels
         clearance_px = clearance / resolution
@@ -98,6 +101,17 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         
         # Zip indices into (row, col) pairs
         whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
+
+        # DEBUG: Save the distance map image
+        debug_img = np.zeros_like(img)
+        for r, c in whitelist_pixels:
+            debug_img[r, c] = 255
+        temp_dir_path = os.path.join(get_package_share_directory('tiago_exam'), 'temp')
+        if not os.path.exists(temp_dir_path):
+            os.makedirs(temp_dir_path)
+        debug_image_path = os.path.join(temp_dir_path, 'debug_map.png')
+        cv2.imwrite(debug_image_path, debug_img)
+        print(f"Safe spawn pixels image saved to /temp/debug_safe_spawn.png")
 
         if not whitelist_pixels:
             print("No safe pixels found. Using default.")
@@ -110,10 +124,16 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         # Note: Coordinate systems vary. Standard ROS is:
         # world_x = origin_x + (column * resolution)
         # world_y = origin_y + ( (height - 1 - row) * resolution )
+
+        ########## CHOICE A ##########
         height, width = img.shape
         world_x = origin[0] + (pixel_c * resolution)
         world_y = origin[1] + ((height - 1 - pixel_r) * resolution)
         world_theta = random.uniform(-math.pi, math.pi)
+
+        ########## CHOICE B ##########
+        world_y = origin[1] + (pixel_r * resolution)
+
 
         return [world_x, world_y, 0.0, world_theta]
     
@@ -197,7 +217,7 @@ def launch_setup(context, *args, **kwargs):
     marker_file_path = os.path.join(pkg_dir, 'data/marker_locations.csv')
     
     # Coordinates generation
-    # coordinates = [0.0, -1.3, 0.0, 0.0]  # Default coordinates if random generation fails
+    #coordinates = [0.0, -1.3, 0.0, 0.0]  # Default coordinates if random generation fails
     coordinates = map_pose_random_generator(map_path)  
 
     ##############
