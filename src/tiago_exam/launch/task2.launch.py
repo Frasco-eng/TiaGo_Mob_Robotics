@@ -47,7 +47,6 @@ import random
 ##################################
 # Functions
 ##################################
-# TODO: trovare un modo per evitare di farci spawnare attaccati agli ostacoli, la clearance non funziona bene
 def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.0) -> list[float]:
     """
     Generates a random pose (x, y, theta) on the map defined by map_path,
