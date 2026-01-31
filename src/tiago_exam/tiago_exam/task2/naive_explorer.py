@@ -18,6 +18,7 @@ from control_msgs.action import FollowJointTrajectory
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
+from tf2_geometry_msgs import do_transform_pose
 
 # Python Standard Libraries
 import yaml
@@ -305,7 +306,7 @@ class NaiveExplorer(Node):
         g.trajectory.joint_names = ['head_1_joint', 'head_2_joint']
         pt = JointTrajectoryPoint()
         pt.positions = [float(pan), float(tilt)]
-        pt.time_from_start = Duration(seconds=2.0).to_msg()
+        pt.time_from_start = Duration(seconds=0.5).to_msg()
         g.trajectory.points = [pt]
         
         # Send goal
@@ -321,6 +322,25 @@ class NaiveExplorer(Node):
         while not res.done(): time.sleep(0.1)
 
         self.get_logger().info(f"Head motion completed.")
+
+    def move_head2(self, pan: float, tilt: float) -> None:
+        # 1. Verifica rapida senza attendere troppo
+        if not self.head_client.server_is_ready():
+            self.get_logger().warn("Head Action Server non pronto, salto movimento")
+            return
+        
+        g = FollowJointTrajectory.Goal()
+        g.trajectory.joint_names = ['head_1_joint', 'head_2_joint']
+        
+        pt = JointTrajectoryPoint()
+        pt.positions = [float(pan), float(tilt)]
+        # Riduciamo il tempo per rendere la testa reattiva (es. 0.5s invece di 2s)
+        pt.time_from_start = Duration(seconds=0.5).to_msg()
+        g.trajectory.points = [pt]
+        
+        # 2. Invia e dimentica (Asincrono vero)
+        # Non mettiamo i "while not f.done()" qui!
+        self.head_client.send_goal_async(g)
 
     def generate_goals(self):
         """
@@ -431,6 +451,8 @@ class NaiveExplorer(Node):
                     # Reset new marker detected flag
                     self.is_new_marker_detected = False
                     
+                    
+                    
                     # Wait for goal completion or interrupt
                     while not res_future.done():
                         # Check for new marker detection interrupt
@@ -456,6 +478,12 @@ class NaiveExplorer(Node):
                     else:
                         self.current_expl_goal_idx += 1
 
+                
+               
+                
+                
+                
+             
                 # --- TRACKING  ---
                 case State.TRACKING:
                     self.get_logger().info("--- State: TRACKING ---")
@@ -485,7 +513,93 @@ class NaiveExplorer(Node):
                             # Compute distance between current goal and new marker estimate
                             dx = self.target_marker_pose.pose.position.x - current_active_goal.pose.position.x
                             dy = self.target_marker_pose.pose.position.y - current_active_goal.pose.position.y
+                            
+                            # Obtain camera position relative to map
+                            try:
+                                t = self.tf_buffer.lookup_transform('map', 'head_1_link', rclpy.time.Time())
+                            except Exception as e:
+                                self.get_logger().warn(f"TF Lookup Error: {e}")
+                                continue
+                            dx_cam = self.target_marker_pose.pose.position.x - t.transform.translation.x
+                            dy_cam = self.target_marker_pose.pose.position.y - t.transform.translation.y
+                            dz_cam = self.target_marker_pose.pose.position.z - t.transform.translation.z
+                            dxy_cam = math.sqrt(dx_cam*dx_cam + dy_cam*dy_cam)
+                            
+                            
+                            # # Obtain yaw of the base_link relative to map
+                            # try:
+                            #     t_base = self.tf_buffer.lookup_transform('map', 'base_link', rclpy.time.Time())
+                            # except Exception as e:
+                            #     self.get_logger().warn(f"TF Lookup Error: {e}")
+                            #     continue
+                            # q = t_base.transform.rotation
+                            # siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+                            # cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+                            # yaw_cam = math.atan2(siny_cosp, cosy_cosp)
+                            
+                            
+                            # self.get_logger().info(f"Marker Correction: dx={dx_cam:.2f}m, dy={dy_cam:.2f}m, dz={dz_cam:.2f}m, yaw={math.degrees(yaw_cam):.1f}deg")
+                            # #Log atan values for debugging in degrees
+                            # self.get_logger().info(f"atan2(dy, dx)={math.degrees(math.atan2(dy_cam, dx_cam)):.1f}deg, atan(dy, dx)={math.degrees(math.atan(dy_cam/dx_cam)):.1f}deg")
+
+                            # #dy_cam_rot = math.cos(-yaw_cam) * dy_cam - math.sin(-yaw_cam) * dx_cam
+                            # #dx_cam_rot = math.sin(-yaw_cam) * dy_cam + math.cos(-yaw_cam) * dx_cam
+
+                            
+                            # # # compute pan using dx, dy and yaw
+                            # #pan_to_marker = math.atan2(dy_cam_rot, dx_cam_rot) 
+                            
+                            
+                            # # We want to know where the map is relative to the robot's base
+                            transform = self.tf_buffer.lookup_transform('base_link', 'map', rclpy.time.Time())
+                            
+                            # # 2. Transform the marker pose into the robot's local frame (base_link)
+                            # # This handles the robot's X, Y, Z, and Yaw/Pitch/Roll automatically
+                            local_pose = do_transform_pose(self.target_marker_pose.pose, transform)
+                            
+                            target_x = local_pose.position.x
+                            target_y = local_pose.position.y
+                            # target_z = local_pose.position.z
+                            
+                            
+                            # 3. Calculate Pan (Head Rotation)
+                            # Looking at the ground plane: how much left/right from the center?
+                            #pan_to_marker = math.atan2(target_y, target_x)
+                            
+                            # 4. Calculate Tilt (Head Pitch)
+                            # We need the vertical angle relative to the head's height.
+                            # Tiago's head is roughly 1.0m to 1.4m high (depending on torso).
+                            # To be precise, let's find the distance in the XY plane:
+                            dist_horizontal = math.sqrt(target_x**2 + target_y**2)
+                            
+                            # We need the target's height relative to the head joints. 
+                            # For simplicity, we can use the base_link Z, but the camera is higher.
+                            # Let's assume the head is ~1.1m above base_link:
+                            
+                            tilt_to_marker = math.atan2(dz_cam, dist_horizontal)
+
+                            # 5. Limit the angles (Safety)
+                            # Tiago Pan: ~ -1.57 to 1.57 | Tilt: ~ -0.7 to 0.7
+                            #pan_to_marker = max(-1.5, min(1.5, pan_to_marker))
+                            tilt_to_marker = max(-0.7, min(0.7, tilt_to_marker))
+
+                            # self.get_logger().info(f"Target in Base: x={target_x:.2f}, y={target_y:.2f}")
+                            # self.get_logger().info(f"Calculated: Pan={math.degrees(pan_to_marker):.1f}°, Tilt={math.degrees(tilt_to_marker):.1f}°")
+
+                            # Use the non-blocking move_head2 you created to keep the loop fluid
+                            self.move_head2(0.0, tilt_to_marker)
+                                                    
+
+                            
+                            # # Compute distance difference
                             dist_diff = math.sqrt(dx*dx + dy*dy)
+
+                            # # Tilt head towards marker
+                            
+                            # tilt_to_marker = math.atan2(dz_cam, dxy_cam)
+                            # print(f"Pan to marker: {math.degrees(pan_to_marker):.1f}deg, tilt to marker: {math.degrees(tilt_to_marker):.1f}deg")
+                            
+                            # self.move_head(pan_to_marker, tilt_to_marker)
                             
                             # If the estimated position has changed by > 5cm, UPDATE THE GOAL!
                             if dist_diff > 0.10: 
@@ -518,13 +632,7 @@ class NaiveExplorer(Node):
                 # --- INSPECTING ---
                 case State.INSPECTING:
                     self.get_logger().info("--- State: INSPECTING ---")
-
-                    # Move head down to inspect
-                    self.move_head(0.0, -0.9)
-
-                    # Wait a bit before saving for safety
-                    time.sleep(2.0)
-
+                    
                     # Save marker info
                     self.save_current_marker()
 

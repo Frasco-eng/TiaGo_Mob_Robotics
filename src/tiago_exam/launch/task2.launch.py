@@ -185,7 +185,7 @@ def launch_setup(context, *args, **kwargs):
     # Declare user home
     # TODO: LOOK FOR GET_PACKAG_DIRECTORY
     user_home = os.path.expanduser('~')
-    workspace_src_path = os.path.join(user_home, 'tiago_gh_ws/src/tiago_exam')
+    workspace_src_path = os.path.join(user_home, 'tiago_mobile_robotics/src/tiago_exam')
 
     # Map path
     map_dir = os.path.join(workspace_src_path, 'maps')
