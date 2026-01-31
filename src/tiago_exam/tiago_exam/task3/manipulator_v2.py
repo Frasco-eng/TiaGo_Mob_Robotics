@@ -134,13 +134,13 @@ class Manipulator(Node):
 
 
     def handle_manipulator_command(self, request, response):
-        self.get_logger().info(f"Received Manipulator Command: {request.command_type}")
-        self.current_command_type = request.command_type  # "PICK" or "PLACE"
-        self.target_pose = request.target_pose
+        self.get_logger().info(f"Received Manipulator Command: {request.type}")
+        self.current_command_type = request.type  # "PICK" or "PLACE"
+        self.target_pose = request.pose
         self.task_finished_event.clear()
         self.task_success = False
 
-        match request.command_type:
+        match request.type:
             case "PICK":
                 self.get_logger().info("Starting PICK operation.")
                 self.current_state = State.MOVE_TO_PRE_GRASP
@@ -148,7 +148,7 @@ class Manipulator(Node):
                 self.get_logger().info("Starting PLACE operation.")
                 self.current_state = State.MOVE_TO_PRE_PLACE
             case _:
-                self.get_logger().error(f"Unknown command type: {request.command_type}")
+                self.get_logger().error(f"Unknown command type: {request.type}")
                 response.success = False
                 return response
 
@@ -156,7 +156,7 @@ class Manipulator(Node):
         self.task_finished_event.wait()
 
         response.success = self.task_success
-        self.get_logger().info(f"Command {request.command_type} completed with success: {self.task_success}")
+        self.get_logger().info(f"Command {request.type} completed with success: {self.task_success}")
 
     def move_arm_to(self, pose):
         position = [pose.position.x, pose.position.y, pose.position.z]
