@@ -99,20 +99,22 @@ def launch_setup(context, *args, **kwargs):
     # Declare the launch arguments
     world_name = LaunchConfiguration("world_name").perform(context)
 
-    # Declare user home
-    user_home = os.path.expanduser('~')
-    workspace_src_path = os.path.join(user_home, 'tiago_gh_ws/src/tiago_exam')
+    # Set map default as env_map
+    map_name = LaunchConfiguration("map_name").perform(context)
+    if not map_name:    
+        map_name = 'env_map'
 
+    # Directories
+    pkg_dir = get_package_share_directory('tiago_exam')
+    
     # Map path
-    map_dir = os.path.join(workspace_src_path, 'maps')
-    map_path = os.path.join(map_dir, f"{world_name}_env_map.yaml")
+    map_path = os.path.join(pkg_dir, f"maps/{world_name}_{map_name}.yaml")
+
+    # Data path
+    marker_file_path = os.path.join(pkg_dir, 'data/marker_locations.csv')
 
     # Coordinates
     coordinates = [0.0, -1.3, 0.0, 0.0]
-
-    # Data path
-    data_dir = os.path.join(workspace_src_path, 'data')
-    marker_file_path = os.path.join(data_dir, 'marker_locations.csv')
 
     ##############
     # Launch Descriptions
@@ -270,8 +272,13 @@ def generate_launch_description():
     # Declare launch arguments
     ld.add_action(DeclareLaunchArgument(
         'world_name',
-        default_value='apartment_task3',
+        default_value='group29',
         description='Name of the Gazebo world to load'))
+    
+    ld.add_action(DeclareLaunchArgument(
+        'map_name',
+        default_value='env_map',
+        description='Name of the map to load without extension. If empty, use default map for the world.'))
     
     ld.add_action(SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'))
     ld.add_action(SetEnvironmentVariable('MESA_GL_VERSION_OVERRIDE', '3.3'))

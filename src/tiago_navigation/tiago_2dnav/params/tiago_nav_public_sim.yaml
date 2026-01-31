@@ -220,7 +220,7 @@ controller_server:
       GoalAlign.forward_point_distance: 0.1 #  0.1 lookahead distance to evaluate goal alignment
 
       
-      RotateToGoal.scale: 10.0 # 24.0 forces the robot to face towards the goal
+      RotateToGoal.scale: 0.0 # 24.0 forces the robot to face towards the goal
       RotateToGoal.slowing_factor: 1.0 # deceleration factor when approaching goal
       RotateToGoal.lookahead_time: 0.1 #predict where the robot will be in time
 

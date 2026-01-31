@@ -12,26 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from os import environ, pathsep
 
+##################################
+# Imports
+##################################
+# ROS2 Libraries
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
-
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-
 from launch_pal.include_utils import include_launch_py_description
-
 from launch_ros.actions import Node
-
-
 from launch.actions import  TimerAction
+from launch.actions import RegisterEventHandler
+from launch.event_handlers import OnProcessExit
+from launch.actions import OpaqueFunction
 
-def get_model_paths(packages_names):
+
+# Python Libraries
+import os
+from os import environ, pathsep
+
+##################################
+# Functions
+##################################
+def get_model_paths(packages_names: list[str]) -> str:
+    """
+    Constructs the GAZEBO_MODEL_PATH by aggregating 'share' directories from the specified packages.
+
+    Parameters
+    ----------
+    packages_names : list of str
+        List of package names to include in the model path.
+
+    Returns
+    -------
+    model_paths : str
+        Concatenated GAZEBO_MODEL_PATH string.
+    """
     model_paths = ''
     for package_name in packages_names:
         if model_paths != '':
@@ -44,8 +65,20 @@ def get_model_paths(packages_names):
 
     return model_paths
 
+def get_resource_paths(packages_names: list[str]) -> str:
+    """
+    Constructs the GAZEBO_RESOURCE_PATH by aggregating package prefixes from the specified packages.
 
-def get_resource_paths(packages_names):
+    Parameters
+    ----------
+    packages_names : list of str
+        List of package names to include in the resource path.
+
+    Returns
+    -------
+    resource_paths : str
+        Concatenated GAZEBO_RESOURCE_PATH string.
+    """
     resource_paths = ''
     for package_name in packages_names:
         if resource_paths != '':
@@ -56,21 +89,32 @@ def get_resource_paths(packages_names):
 
     return resource_paths
 
-
-def generate_launch_description():
+##################################
+# Launch Setup
+##################################
+def launch_setup(context, *args, **kwargs):
+    ##############
+    # Paths and Configurations
+    ##############
 
     # Declare the launch arguments
-    world_name_arg = DeclareLaunchArgument("world_name", default_value="1")
+    world_name = LaunchConfiguration("world_name").perform(context)
 
+    # Set the map default as env_map
+    map_name = LaunchConfiguration("map_name").perform(context)
+    if not map_name:    
+        map_name = 'env_map'
 
-    map_name_arg = DeclareLaunchArgument(
-        'map_name', 
-        default_value='env_map',
-        description='Name of the map file to be saved'
-    )
-
-    #Include the launch descriptions
-
+    # Directories
+    pkg_dir = get_package_share_directory('tiago_exam')
+    
+    # Map path
+    map_path = os.path.join(pkg_dir, f"maps/{world_name}_{map_name}.yaml")
+    
+    ##############
+    # Launch Descriptions
+    ##############
+    
     # Gazebo launch (launch the gazebo simulator with the world_name argument for the world selection)
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
@@ -106,14 +150,13 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': 'True', 'is_public_sim': 'True', 'rviz' : 'True', 'slam': 'True', 'world_name': LaunchConfiguration("world_name")}.items())
 
     # Explore lite launch (load the explore_lite package for autonomous exploration)
-    explore_lite_cmd = IncludeLaunchDescription(
+    explore_lite = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
         get_package_share_directory('explore_lite'), 'launch'),
         '/explore.launch.py']),
         launch_arguments={
         'use_sim_time': 'True'}.items(),
     )
-
 
     # Tuck arm launch (load the tuck arm node to avoid collisions with the environment)
     tuck_arm = Node(package='tiago_exam',
@@ -126,29 +169,36 @@ def generate_launch_description():
         period=8.0,
         actions=[tuck_arm]
     )
+    
 
-    delayed_explore_lite = TimerAction(
-        period=12.0,
-        actions=[explore_lite_cmd]
+    event_handler_tuck = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=tuck_arm,
+            on_exit=[explore_lite],
+        )
     )
 
-    full_map_path = PathJoinSubstitution([
-        '/home/giulio/tiago_ws/src/tiago_exam/maps',
-        [LaunchConfiguration('world_name'), '_', LaunchConfiguration('map_name')]
-    ])
 
     # Sostituiamo il save_map_on_exit con il nostro Watcher Node
     map_watcher_node = Node(
         package='tiago_exam',
         executable='map_saver_watcher',
         parameters=[{
-            'map_full_path': full_map_path,
+            'map_full_path': map_path,
             'use_sim_time': True
         }],
         output='screen'
     )
     
 
+
+    return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup,
+            move_group, delayed_tuck_arm, event_handler_tuck, event_handler_tuck, map_watcher_node]
+
+##################################
+# Generate Launch Description
+##################################
+def generate_launch_description():
     # Set the GAZEBO_MODEL_PATH and GAZEBO_RESOURCE_PATH environment variables
     packages = ['tiago_description', 'pmb2_description',
                 'pal_hey5_description', 'pal_gripper_description',
@@ -164,29 +214,23 @@ def generate_launch_description():
     if 'GAZEBO_RESOURCE_PATH' in environ:
         resource_path += pathsep + environ['GAZEBO_RESOURCE_PATH']
 
-    
     # Create the launch description and populate
     ld = LaunchDescription()
     
+    # Declare launch arguments
+    ld.add_action(DeclareLaunchArgument(
+        'world_name',
+        default_value='group29',
+        description='Name of the Gazebo world to load'))
+    
+    ld.add_action(DeclareLaunchArgument(
+        'map_name',
+        default_value='env_map',
+        description='Name of the map to load without extension. If empty, use default map for the world.'))
+   
     ld.add_action(SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'))
     ld.add_action(SetEnvironmentVariable('MESA_GL_VERSION_OVERRIDE', '3.3'))
-
     ld.add_action(SetEnvironmentVariable('GAZEBO_MODEL_PATH', model_path))
-
-    ld.add_action(map_name_arg)
-    ld.add_action(world_name_arg)
-
-    ld.add_action(gazebo)
-    ld.add_action(tiago_spawn)
-    ld.add_action(tiago_bringup)
-    
-    ld.add_action(tiago_nav_bringup)
-
-    ld.add_action(move_group)
-
-    ld.add_action(delayed_tuck_arm)
-
-    ld.add_action(delayed_explore_lite)
-    ld.add_action(map_watcher_node)
+    ld.add_action(OpaqueFunction(function=launch_setup))
 
     return ld
