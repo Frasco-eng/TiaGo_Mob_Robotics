@@ -422,7 +422,7 @@ def launch_setup(context, *args, **kwargs):
 
 
     return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup,
-            localization, move_group, aruco_place, aruco_pick, event_handler_localization_exploration]
+            localization, move_group, aruco_place, aruco_pick, event_handler_localization_exploration, delayed_tuck_arm]
 
 ##################################
 # Generate Launch Description

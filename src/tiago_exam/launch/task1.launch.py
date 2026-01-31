@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 ##################################
 # Imports
 ##################################
@@ -89,6 +88,24 @@ def get_resource_paths(packages_names: list[str]) -> str:
 
     return resource_paths
 
+def get_package_src_directory(package_name):
+    install_path = get_package_share_directory(package_name)
+    
+    # install_path: .../workspace/install/nome_pkg/share/nome_pkg
+    workspace_path = install_path
+    for _ in range(4):
+        workspace_path = os.path.dirname(workspace_path)
+    
+    # Build the src path
+    src_path = os.path.join(workspace_path, 'src', package_name)
+    
+    # Safety check
+    if not os.path.exists(src_path):
+        print(f"[WARN] Cannot find {src_path}. Are you using a standard workspace?")
+        return None
+        
+    return src_path
+
 ##################################
 # Launch Setup
 ##################################
@@ -106,10 +123,10 @@ def launch_setup(context, *args, **kwargs):
         map_name = 'env_map'
 
     # Directories
-    pkg_dir = get_package_share_directory('tiago_exam')
+    pkg_dir = get_package_src_directory('tiago_exam')
     
     # Map path
-    map_path = os.path.join(pkg_dir, f"maps/{world_name}_{map_name}.yaml")
+    map_path = os.path.join(pkg_dir, f"maps/{world_name}_{map_name}")
     
     ##############
     # Launch Descriptions
@@ -170,6 +187,11 @@ def launch_setup(context, *args, **kwargs):
         actions=[tuck_arm]
     )
     
+    
+    delayed_explore_lite = TimerAction(
+        period=10.0,
+        actions=[explore_lite]
+    )
 
     event_handler_tuck = RegisterEventHandler(
         event_handler=OnProcessExit(
@@ -193,7 +215,7 @@ def launch_setup(context, *args, **kwargs):
 
 
     return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup,
-            move_group, delayed_tuck_arm, event_handler_tuck, event_handler_tuck, map_watcher_node]
+            move_group, delayed_tuck_arm, delayed_explore_lite, map_watcher_node]
 
 ##################################
 # Generate Launch Description

@@ -14,6 +14,7 @@ from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 from tf2_ros.transform_broadcaster import TransformBroadcaster
 from tf2_geometry_msgs import do_transform_pose
 from rclpy.executors import MultiThreadedExecutor
+import PyKDL as kdl
 
 # Custom Services
 from exam_interfaces.srv import StartNavigation, MoveHead, ManipulatorCommand
@@ -182,7 +183,7 @@ class Coordinator(Node):
         self.latest_aruco_frame = msg
         if self.current_state == State.PICK and self.sub_step == 2:
             pass
-    
+            
     ##################################
     # Call
     ##################################
@@ -228,8 +229,8 @@ class Coordinator(Node):
         req = ManipulatorCommand.Request()
 
         # Set command type and target pose
-        req.command_type = type_cmd
-        req.target_pose = pose
+        req.type = type_cmd
+        req.pose = pose
         
         # Send the request
         self.future = self.manip_client.call_async(req)
@@ -424,17 +425,17 @@ class Coordinator(Node):
 
                             if pose_base:
                                 self.target_cube_pose = pose_base # PoseStamped
-                                self.get_logger().info(f"Cube found at (base_link): {pose_base.pose.position}")
+                                self.get_logger().info(f"Cube found at (base_link): {pose_base.position}")
                                 
                                 # (Opzionale) Pubblica TF per debug visivo su RViz
                                 t = TransformStamped()
                                 t.header.stamp = self.get_clock().now().to_msg()
                                 t.header.frame_id = 'base_link'
                                 t.child_frame_id = 'target_cube_frame'
-                                t.transform.translation.x = pose_base.pose.position.x
-                                t.transform.translation.y = pose_base.pose.position.y
-                                t.transform.translation.z = pose_base.pose.position.z
-                                t.transform.rotation = pose_base.pose.orientation
+                                t.transform.translation.x = pose_base.position.x
+                                t.transform.translation.y = pose_base.position.y
+                                t.transform.translation.z = pose_base.position.z
+                                t.transform.rotation = pose_base.orientation
                                 self.tf_broadcaster.sendTransform(t)
                                 
                                 self.sub_step += 1
@@ -450,7 +451,7 @@ class Coordinator(Node):
                             
                     case 3:
                         self.get_logger().info("Sending pick command to manipulator...")
-                        self.send_manip_cmd(type_cmd='PICK', pose=self.target_cube_pose.pose)
+                        self.send_manip_cmd(type_cmd='PICK', pose=self.target_cube_pose)
                     
                     case 4:
                         self.get_logger().info("Pick operation completed.")
@@ -462,7 +463,7 @@ class Coordinator(Node):
                 if self.current_cube_idx < len(self.cubes_to_pick):
 
                     match self.sub_step:
-                        # Navigate to place location
+                        # Navigate to place location    
                         case 0:
                             cube = self.cubes_to_pick[self.current_cube_idx]
                             self.send_nav_goal(self.place_loc[0], self.place_loc[1], self.place_orientation)
@@ -577,6 +578,30 @@ class Coordinator(Node):
                 self.get_logger().info('Task 3 completed!')
                 # Optionally shutdown
                 # rclpy.shutdown()
+                
+                
+    #################################
+    # Helper Functions
+    ##################################
+
+    def transform_stamped_to_kdl(self, ts: TransformStamped) -> kdl.Frame:
+        t = ts.transform.translation
+        q = ts.transform.rotation
+        return kdl.Frame(kdl.Rotation.Quaternion(q.x, q.y, q.z, q.w), kdl.Vector(t.x, t.y, t.z))
+    
+    def kdl_to_pose_msg(self, frame: kdl.Frame, frame_id: str) -> PoseStamped:
+        p = PoseStamped()
+        p.header.stamp = self.get_clock().now().to_msg()
+        p.header.frame_id = frame_id
+        p.pose.position.x = frame.p.x()
+        p.pose.position.y = frame.p.y()
+        p.pose.position.z = frame.p.z()
+        qx, qy, qz, qw = frame.M.GetQuaternion()
+        p.pose.orientation.x = qx
+        p.pose.orientation.y = qy
+        p.pose.orientation.z = qz
+        p.pose.orientation.w = qw
+        return p
 
 def main(args=None):
     rclpy.init(args=args)

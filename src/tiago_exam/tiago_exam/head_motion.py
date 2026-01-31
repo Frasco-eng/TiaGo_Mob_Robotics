@@ -15,6 +15,11 @@ from rclpy.executors import MultiThreadedExecutor
 # Custom Service
 from exam_interfaces.srv import MoveHead
 
+HEAD_UP = 0.95
+HEAD_DOWN = -0.5
+HEAD_LEFT = 1.5
+HEAD_RIGHT = -1.5
+
 ##################################
 # Head Motion Service Node
 ##################################

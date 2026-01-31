@@ -5,7 +5,7 @@
     costmap_topic: map 
     costmap_updates_topic: map_updates 
     visualize: true 
-    planner_frequency: 0.15 # Keep 0.15 for Tiago
+    planner_frequency: 2.0 # Keep 0.15 for Tiago
     progress_timeout: 120.0 # Keep 120.0 to avoid black listing far frontiers too early
     potential_scale: 10.0 
     orientation_scale: 0.0 
