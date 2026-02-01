@@ -66,10 +66,20 @@ class HeadMotionService(Node):
         if not goal_handle.accepted:
             response.success = False
             
-        else:
+        result_future = goal_handle.get_result_async()
+        while not result_future.done():
+            time.sleep(0.1)
+
+        nav_result = result_future.result() 
+
+        # Status 4 = SUCCEEDED
+        if nav_result.status == 4:
             response.success = True
+        else:
+            response.success = False
             
         return response
+            
             
 
 ##################################

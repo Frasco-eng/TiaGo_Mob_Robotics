@@ -18,13 +18,13 @@ limitations under the License.
 
   <xacro:macro name="finger_gazebo" params="name">
     <gazebo reference="${name}_link">
-      <kp>1000000.0</kp>
-      <kd>1.0</kd>
-      <mu1>1.0</mu1>
-      <mu2>1.0</mu2>
+      <kp>100000.0</kp>
+      <kd>10.0</kd>
+      <mu1>10000.0</mu1> 
+      <mu2>10000.0</mu2>
       <fdir1>0 0 0</fdir1>
       <maxVel>1.0</maxVel>
-      <minDepth>0.1</minDepth>
+      <minDepth>0.001</minDepth>
       <material>Gazebo/Black</material>
     </gazebo>
     <gazebo reference="${name}_joint">
@@ -34,3 +34,5 @@ limitations under the License.
   </xacro:macro>
 
 </robot>
+
+<!-- mu1 10, mu2 10, minDepth 0.1, kp 1000000, kd 1 -->

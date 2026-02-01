@@ -43,7 +43,7 @@ setup(
             
             # Task 3 Nodes
             'coordinator_task3 = tiago_exam.task3.coordinator_task3:main',              
-            'manipulator = tiago_exam.task3.manipulator_v2:main',           
+            'manipulator = tiago_exam.task3.manipulator:main',           
             
         ],
     },

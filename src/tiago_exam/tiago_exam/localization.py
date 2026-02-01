@@ -59,8 +59,10 @@ class GlobalLocalizationNode(Node):
         ##################################
         # Thresholds and Flags
         ##################################
-        self.pos_threshold = 0.07  # Variance X e Y (square meters)
-        self.yaw_threshold = 0.07  # Variance Yaw (square radians)
+        self.pos_threshold = 0.03       # Variance X e Y (square meters)
+        self.yaw_threshold = 0.03       # Variance Yaw (square radians)
+        self.max_attempt_before_reset = 7     # Max attempts before resetting particles
+
         
         self.amcl_pose_received = False     # Flag to check if we received AMCL pose
         self.current_covariance = []        # Store the latest covariance
@@ -136,15 +138,13 @@ class GlobalLocalizationNode(Node):
             rclpy.spin_once(self, timeout_sec=1.0)
             time.sleep(1.0)
         
-        MAX_ATTEMPTS_BEFORE_RESET = 5
-
         # Start localization attempts
         attempt = 0  
 
         while rclpy.ok(): 
             self.get_logger().info(f'--- Localization Attempt {attempt+1} ---')
 
-            if attempt >= MAX_ATTEMPTS_BEFORE_RESET:
+            if attempt >= self.max_attempt_before_reset:
                 self.get_logger().warn(f'Failed for {attempt} times! Relaunching Global Localization to reset particles...')
                 self.call_global_localization()
                 attempt = 0  # Reset the counter to give new particles time to converge

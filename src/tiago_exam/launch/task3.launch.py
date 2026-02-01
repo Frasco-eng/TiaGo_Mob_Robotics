@@ -36,12 +36,7 @@ from tiago_exam import utils
 # Python Libraries
 import os
 from os import environ, pathsep
-import random
-import time
-import math
-import yaml
-import cv2
-import numpy as np
+
 
 
 ##################################
@@ -124,7 +119,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Coordinates
     coordinates = [0.0, -1.3, 0.0, 0.0]
-    coordinates = utils.map_pose_random_generator(map_path, safe_coords=coordinates, clearance=1.0)
+    #coordinates = utils.map_pose_random_generator(map_path, safe_coords=coordinates, clearance=1.0)
 
     ##############
     # Launch Descriptions
