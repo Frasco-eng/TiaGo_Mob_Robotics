@@ -137,9 +137,9 @@ class Coordinator(Node):
         # Station Locations
         ##################################
         self.pick_loc = (0.0, 0.0)      # Pick location (x, y)
-        self.pick_orientation = None
+        self.pick_orientation = (0.0, 0.0, 0.0, 1.0)
         self.place_loc = (0.0, 0.0)     # Place location (x, y)
-        self.place_orientation = None
+        self.place_orientation = (0.0, 0.0, 0.0, 1.0)
         self.height_place = 0.0         # Place height (z)
 
         ##################################
@@ -253,7 +253,7 @@ class Coordinator(Node):
     ##################################
     # Method
     ##################################
-    def load_station_locations(self) -> tuple[tuple, tuple, float, Pose, Pose]:
+    def load_station_locations(self):
         """
         Load station locations from CSV file
         
@@ -304,7 +304,7 @@ class Coordinator(Node):
                     
         except Exception as e:
             self.get_logger().error(f'Failed to load station locations: {e}')
-            return (0.0, 0.0), (0.0, 0.0), 0.0
+            return (0.0, 0.0), (0.0, 0.0), 0.0, (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0)
         
         return pick_loc, place_loc, height_place, pick_orientation, place_orientation
     

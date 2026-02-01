@@ -30,12 +30,23 @@ setup(
             'tuck_arm = tiago_exam.tuck_arm:main',
             'map_navigator = tiago_exam.map_navigator:main',
             'head_motion = tiago_exam.head_motion:main',
+            'localization = tiago_exam.localization:main',
+            
             # Task 1 Nodes
             'map_saver_watcher = tiago_exam.task1.map_saver_watcher:main',
             # Task 2 Nodes
-            'localization = tiago_exam.task2.localization:main',
-            'naive_explorer = tiago_exam.task2.naive_explorer:main',        # DA CAMBIARE IN COORDINATOR_TASK2
-            'aruco_noter = tiago_exam.task2.aruco_noter:main',
+            #'localization = tiago_exam.task2.localization:main',
+            #'naive_explorer = tiago_exam.task2.naive_explorer:main',        # DA CAMBIARE IN COORDINATOR_TASK2
+            #'aruco_tracker = tiago_exam.task2.aruco_tracker:main',
+
+            # Task 2 Copy Nodes
+            
+            'coordinator_task2 = tiago_exam.task2_copy.coordinator_task2:main',
+            'aruco_tracker = tiago_exam.task2_copy.aruco_tracker:main',
+            'aruco_noter = tiago_exam.task2_copy.aruco_noter:main',
+            'naive_explorer = tiago_exam.task2_copy.naive_explorer:main',
+            
+
             # Task 3 Nodes
             'coordinator = tiago_exam.task3.coordinator:main',              # DA CAMBIARE IN COORDINATOR_TASK3
             'manipulator = tiago_exam.task3.manipulator_v2:main',           # CAMBIATO QUA

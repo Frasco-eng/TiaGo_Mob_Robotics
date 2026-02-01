@@ -1,0 +1,4 @@
+---
+bool success
+geometry_msgs/PoseStamped next_goal
+bool is_last_goal

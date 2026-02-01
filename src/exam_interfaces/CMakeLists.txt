@@ -13,7 +13,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveHead.srv"
   "srv/StartNavigation.srv"
   "srv/ManipulatorCommand.srv"
-  "msg/MoveHead.msg"
+  "srv/SaveMarker.srv"
+  "srv/GetNextGoal.srv"
+  "srv/InitGoals.srv"
+  "msg/HeadPose.msg"
   DEPENDENCIES geometry_msgs
 )
 

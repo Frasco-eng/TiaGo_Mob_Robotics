@@ -50,7 +50,7 @@ class State(Enum):
 ##################################
 # Helper Function
 ##################################
-def generate_random_goal(map_path: str, num_goals: int, clearance: float = 0.5) -> tuple[list, list]:
+def generate_random_goal(map_path: str, num_goals: int, clearance: float = 0.4) -> tuple[list, list]:
     """
     Generates random goal coordinates within the map that are safe based on the specified clearance.
 
@@ -61,7 +61,7 @@ def generate_random_goal(map_path: str, num_goals: int, clearance: float = 0.5) 
     num_goals : int
         The number of random goals to generate.
     clearance : float, optional
-        The minimum clearance distance from obstacles in meters, by default 0.5
+        The minimum clearance distance from obstacles in meters, by default 0.4
 
     Returns
     -------

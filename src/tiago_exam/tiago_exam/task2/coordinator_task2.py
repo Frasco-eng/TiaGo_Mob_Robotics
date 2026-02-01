@@ -9,7 +9,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 
 
 # Custom Services
-from exam_interfaces.srv import StartNavigation, MoveHead, ManipulatorCommand
+from exam_interfaces.srv import StartNavigation, MoveHead
 
 # Python Libraries
 import os

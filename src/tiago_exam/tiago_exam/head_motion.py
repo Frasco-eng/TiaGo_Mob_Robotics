@@ -15,10 +15,16 @@ from rclpy.executors import MultiThreadedExecutor
 # Custom Service
 from exam_interfaces.srv import MoveHead
 
-HEAD_UP = 0.95
-HEAD_DOWN = -0.5
-HEAD_LEFT = 1.5
-HEAD_RIGHT = -1.5
+
+JOINT_NAMES = [
+    'head_1_joint',  # Pan
+    'head_2_joint'   # Tilt
+]
+
+HEAD_UP = 0.7
+HEAD_DOWN = -0.95
+HEAD_LEFT = 1.2
+HEAD_RIGHT = -1.2
 
 ##################################
 # Head Motion Service Node
@@ -27,6 +33,9 @@ class HeadMotionService(Node):
     def __init__(self):
         super().__init__('head_motion_service')
 
+        ##################################
+        # Callback Group
+        ##################################
         self.cb_group = ReentrantCallbackGroup()
         
         ##################################
@@ -55,10 +64,10 @@ class HeadMotionService(Node):
 
         # Prepare the goal
         goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = ['head_1_joint', 'head_2_joint']
+        goal.trajectory.joint_names = JOINT_NAMES
         pt = JointTrajectoryPoint()
         pt.positions = [float(request.pan), float(request.tilt)]
-        pt.time_from_start = Duration(sec=2, nanosec=0)
+        pt.time_from_start = Duration(sec=0, nanosec=500_000_000)  # 0.5 seconds to reach the
         goal.trajectory.points = [pt]
 
         # Send the goal

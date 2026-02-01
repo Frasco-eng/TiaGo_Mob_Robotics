@@ -282,7 +282,7 @@ def launch_setup(context, *args, **kwargs):
         map_name = 'env_map'
 
     # Directories
-    pkg_dir = get_package_share_directory('tiago_exam')
+    pkg_dir = get_package_src_directory('tiago_exam')
     
     # Map path
     map_path = os.path.join(pkg_dir, f"maps/{world_name}_{map_name}.yaml")

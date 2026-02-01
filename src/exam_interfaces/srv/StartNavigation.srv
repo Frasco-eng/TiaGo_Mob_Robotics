@@ -1,4 +1,3 @@
 geometry_msgs/PoseStamped pose
-bool is_station
 ---
 bool success
