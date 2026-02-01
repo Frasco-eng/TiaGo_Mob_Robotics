@@ -231,13 +231,16 @@ class GlobalLocalizationNode(Node):
             var_yaw < self.yaw_threshold):
             return True
         return False
-    
+
+
+##################################
+# Main Function
+##################################
 def main(args=None):
     rclpy.init(args=args)
 
     node = GlobalLocalizationNode()
     
-    # Wait for the system to settle before starting
     time.sleep(3.0)
 
     node.localization_process()
@@ -245,5 +248,8 @@ def main(args=None):
     node.destroy_node()
     rclpy.shutdown()
 
+##################################
+# Entry Point
+##################################
 if __name__ == '__main__':
     main()

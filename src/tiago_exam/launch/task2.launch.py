@@ -392,21 +392,55 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
-    # Naive explorer node (load the explorer node to spot the markers after localization)
+    coordinator = Node(
+        package='tiago_exam',
+        executable='coordinator_task2',
+        emulate_tty=True,
+        output='both',
+        parameters=[{'use_sim_time': True}]
+    )
+    
+    map_navigator = Node(
+        package='tiago_exam',
+        executable='map_navigator',
+        emulate_tty=True,
+        output='both',
+        parameters=[{'use_sim_time': True}]
+    )
+
+    # Naive explorer node (load the explorer node to generate navigation goals)
     naive_explorer = Node(
         package='tiago_exam',
         executable='naive_explorer',
         emulate_tty=True,
         output='both',
         parameters=[{'use_sim_time': True,
-                    'map_path': map_path,
-                    'marker_file_path': marker_file_path}]
+                    'map_path': map_path}]
     )
 
-    # Aruco noter node (load the aruco noter node to log found markers)
+    # Aruco noter node (write marker detections to CSV file)
     aruco_noter = Node(
         package='tiago_exam',
         executable='aruco_noter',
+        emulate_tty=True,
+        output='both',
+        parameters=[{'use_sim_time': True,
+                     'marker_file_path': marker_file_path}]
+    )
+
+    # Aruco tracker node (track aruco markers and provide their last known pose)
+    aruco_tracker = Node(
+        package='tiago_exam',
+        executable='aruco_tracker',
+        emulate_tty=True,
+        output='both',
+        parameters=[{'use_sim_time': True,
+                     'marker_file_path': marker_file_path}]
+    )
+
+    move_head = Node(
+        package='tiago_exam',
+        executable='head_motion',
         emulate_tty=True,
         output='both',
         parameters=[{'use_sim_time': True}]
@@ -416,9 +450,11 @@ def launch_setup(context, *args, **kwargs):
     event_handler_localization_exploration = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=localization,
-            on_exit=[naive_explorer, aruco_noter],
+            on_exit=[naive_explorer, aruco_noter, aruco_tracker, coordinator, map_navigator, move_head],
         )
     )
+    
+    
 
 
     return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup,

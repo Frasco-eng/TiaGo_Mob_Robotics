@@ -32,6 +32,7 @@ import os
 import csv
 import time
 from threading import Thread
+from tiago_exam import utils
 
 
 ##################################
@@ -94,9 +95,9 @@ class State(Enum):
 ##################################
 # Coordinator Node
 ##################################
-class Coordinator(Node):
+class CoordinatorTask3(Node):
     def __init__(self):
-        super().__init__('coordinator')
+        super().__init__('coordinator_task3')
 
 
         ##################################
@@ -107,7 +108,7 @@ class Coordinator(Node):
         ##################################
         # Class Parameters
         ##################################
-        ws_src_path = os.path.join(os.path.expanduser('~'), 'tiago_gh_ws/src/tiago_exam')
+        ws_src_path = utils.get_package_src_directory('tiago_exam')
         map_path_dir = os.path.join(ws_src_path, 'maps')
         data_path_dir = os.path.join(ws_src_path, 'data')
         
@@ -124,6 +125,9 @@ class Coordinator(Node):
         self.waiting_for_service = False
         self.waiting_for_manip = False
         self.future = None
+        
+        self.nav_in_progress = False
+        self.nav_outcome = False
 
         ##################################
         # Cubes Variables
@@ -184,30 +188,39 @@ class Coordinator(Node):
         if self.current_state == State.PICK and self.sub_step == 2:
             pass
             
+            
+    def nav_response_callback(self, future):
+        try:
+            response = future.result()
+            self.nav_outcome = response.success
+            if self.nav_outcome:
+                self.get_logger().info("Callback: Navigation Succeeded.")
+            else:
+                self.get_logger().warn("Callback: Navigation Failed.")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
+            self.nav_outcome = False
+        finally:
+            # IMPORTANT: Lower the flag so the main loop knows we are done
+            self.nav_in_progress = False
+            
     ##################################
     # Call
     ##################################
-    def send_nav_goal(self, x, y, orientation=None):
-        # Create a request
-        req = StartNavigation.Request()
-        req.pose.header.frame_id = 'map'
-        req.pose.header.stamp = self.get_clock().now().to_msg()
+      
+    def call_send_nav_goal_srv(self, goal: PoseStamped):
+        nav_req = StartNavigation.Request()
+        nav_req.pose = goal
+        
+        self.get_logger().info("Sending navigation goal (Async)...")
 
-        # Set position
-        req.pose.pose.position.x = x
-        req.pose.pose.position.y = y
-        req.pose.pose.position.z = 0.0
+        self.nav_in_progress = True
+        self.nav_outcome = False
+    
+        nav_future = self.nav_client.call_async(nav_req)
+        
+        nav_future.add_done_callback(self.nav_response_callback)
 
-        if orientation is not None:
-            req.pose.pose.orientation = orientation
-        else:
-            req.pose.pose.orientation.w = 1.0 # Default fallback
-
-        # Send the request
-        self.future = self.nav_client.call_async(req)
-
-        # Raise waiting for service flag
-        self.waiting_for_service = True
 
     def send_head_goal(self, pan, tilt):
         # Create a request
@@ -266,6 +279,15 @@ class Coordinator(Node):
         height_place : float
             z coordinate (height) of place location
         """
+
+        pick_loc = (0.0, 0.0)
+        place_loc = (0.0, 0.0)
+        height_place = 0.0
+        pick_orientation = Pose().orientation
+        pick_orientation.w = 1.0
+        place_orientation = Pose().orientation
+        place_orientation.w = 1.0
+
         try:
             with open(self.marker_file_path, 'r') as f:
                 reader = csv.DictReader(f)
@@ -284,11 +306,11 @@ class Coordinator(Node):
                     q.z = float(row['qz'])
                     q.w = float(row['qw'])
 
-                    if 'target_aruco_pick_marker_frame' in row['id']:
+                    if 'target_aruco_pick_marker_frame' in row['name']:
                         pick_loc = (x, y)
                         pick_orientation = q
 
-                    elif 'target_aruco_place_marker_frame' in row['id']:
+                    elif 'target_aruco_place_marker_frame' in row['name']:
                         place_loc = (x, y)
                         place_orientation = q
                         height_place = z
@@ -304,7 +326,7 @@ class Coordinator(Node):
                     
         except Exception as e:
             self.get_logger().error(f'Failed to load station locations: {e}')
-            return (0.0, 0.0), (0.0, 0.0), 0.0, (0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0)
+            return pick_loc, place_loc, height_place, pick_orientation, place_orientation
         
         return pick_loc, place_loc, height_place, pick_orientation, place_orientation
     
@@ -366,9 +388,7 @@ class Coordinator(Node):
                 # Load station locations from CSV
                 self.pick_loc, self.place_loc, self.height_place, self.pick_orientation, self.place_orientation = self.load_station_locations()
 
-                self.get_logger().info(f'Pick Location: {self.pick_loc}\
-                                        Place Location: {self.place_loc}\
-                                        Place Height: {self.height_place}')
+                self.get_logger().info(f'Pick Location: {self.pick_loc}, Place Location: {self.place_loc}, Place Height: {self.height_place}')
 
                 # Load cubes to pick
                 for cube_id in self.cubes_id:
@@ -377,7 +397,6 @@ class Coordinator(Node):
                 # Look for cubes to pick
                 if self.cubes_to_pick:
                     self.current_state = State.NAVIGATE_PICK
-                    self.sub_step = 0
                 else:
                     self.current_state = State.DONE
                     self.get_logger().error('No cubes to pick?')
@@ -386,26 +405,35 @@ class Coordinator(Node):
                 self.get_logger().info("--- State: NAVIGATE_PICK ---")
 
                 if self.current_cube_idx < len(self.cubes_to_pick):
-
-                    match self.sub_step:
-                        # Navigate to pick location
-                        case 0: 
-                            cube = self.cubes_to_pick[self.current_cube_idx]
-                            # TODO: la pick loc deve essere 20cm prima, non 50cm
-                            self.send_nav_goal(self.pick_loc[0], self.pick_loc[1], self.pick_orientation)
-                            self.get_logger().info(f'Navigating to pick location for cube {cube.marker_id}')
-
-                        # Handle arrival
-                        case 1: 
-                            self.get_logger().info("Arrived at Pick Station.")
-                            self.current_state = State.PICK
-                            self.sub_step = 0
+    
+                    cube = self.cubes_to_pick[self.current_cube_idx]
                     
+                    if not self.nav_in_progress and not self.nav_outcome:
+                        
+                        goal = PoseStamped()
+                        goal.header.frame_id = 'map'
+                        goal.pose.position.x = self.pick_loc[0]
+                        goal.pose.position.y = self.pick_loc[1]
+                        goal.pose.orientation = self.pick_orientation
+                        
+                        self.call_send_nav_goal_srv(goal)
+                        self.get_logger().info(f'Navigating to pick location for cube {cube.marker_id}')
+                    
+                    elif self.nav_in_progress and not self.nav_outcome:
+                        self.get_logger().info("Navigation goal in progress...")
+                        time.sleep(0.5)
+                            
+                    else: 
+                        self.get_logger().info("Arrived at Pick Station.")
+                        self.current_state = State.PICK
+                        self.sub_step = 0
+                        self.nav_outcome = False
+                        self.nav_in_progress = False
+        
                 else:
                     self.current_state = State.HOME
         
             case State.PICK:
-                # TODO: sistemare da qua che spamma pick
                 self.get_logger().info("--- State: PICK ---")
 
                 match self.sub_step:
@@ -448,11 +476,13 @@ class Coordinator(Node):
                                 self.get_logger().error("Marker NOT found. Skipping cube.")
                                 self.current_state = State.NAVIGATE_PLACE
                                 self.sub_step = 0
+                        
                             
                     case 3:
                         self.get_logger().info("Sending pick command to manipulator...")
-                        self.send_manip_cmd(type_cmd='PICK', pose=self.target_cube_pose)
-                    
+                        #self.send_manip_cmd(type_cmd='PICK', pose=self.target_cube_pose)
+                        self.current_state = State.NAVIGATE_PLACE
+                        self.sub_step = 0
                     case 4:
                         self.get_logger().info("Pick operation completed.")
                         self.current_state = State.NAVIGATE_PLACE
@@ -461,19 +491,30 @@ class Coordinator(Node):
             case State.NAVIGATE_PLACE:
                 self.get_logger().info("--- State: NAVIGATE_PLACE ---")
                 if self.current_cube_idx < len(self.cubes_to_pick):
-
-                    match self.sub_step:
-                        # Navigate to place location    
-                        case 0:
-                            cube = self.cubes_to_pick[self.current_cube_idx]
-                            self.send_nav_goal(self.place_loc[0], self.place_loc[1], self.place_orientation)
-                            self.get_logger().info(f'Navigating to place location for cube {cube.marker_id}')
-
-                        # Handle arrival
-                        case 1: 
-                            self.get_logger().info("Arrived at Place Station.")
-                            self.current_state = State.PLACE
-                            self.sub_step = 0
+                            
+                    cube = self.cubes_to_pick[self.current_cube_idx]
+                    
+                    if not self.nav_in_progress and not self.nav_outcome:
+                        
+                        goal = PoseStamped()
+                        goal.header.frame_id = 'map'
+                        goal.pose.position.x = self.place_loc[0]
+                        goal.pose.position.y = self.place_loc[1]
+                        goal.pose.orientation = self.place_orientation
+                        
+                        self.call_send_nav_goal_srv(goal)
+                        self.get_logger().info(f'Navigating to pick location for cube {cube.marker_id}')
+                    
+                    elif self.nav_in_progress and not self.nav_outcome:
+                        self.get_logger().info("Navigation goal in progress...")
+                        time.sleep(0.5)
+                            
+                    else: 
+                        self.get_logger().info("Arrived at Place Station.")
+                        self.current_state = State.PLACE
+                        self.sub_step = 0
+                        self.nav_outcome = False
+                        self.nav_in_progress = False
                     
                 else:
                     self.current_state = State.HOME
@@ -523,11 +564,15 @@ class Coordinator(Node):
                         # Salviamo la posa per il prossimo step
                         self.target_place_pose = place_pose
                         self.sub_step += 1
+                        
+                        
 
                     # 1: Invia comando PLACE al Manipulator (Service)
                     case 3:
                         self.get_logger().info("Sending PLACE command...")
-                        self.send_manip_cmd("PLACE", self.target_place_pose)
+                        #self.send_manip_cmd("PLACE", self.target_place_pose)
+                        self.current_state = State.NEXT_CUBE
+                        self.sub_step = 0
                     
                     # 2: Servizio completato -> Prossimo Cubo
                     case 4:
@@ -605,7 +650,7 @@ class Coordinator(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    coordinator = Coordinator()
+    coordinator = CoordinatorTask3()
 
     executor = MultiThreadedExecutor()
     executor.add_node(coordinator)

@@ -41,6 +41,8 @@ class MapNavigatorService(Node):
 
         goal = NavigateToPose.Goal()
         goal.pose = request.pose
+        
+        self.get_logger().info(f"Goal Pose: {goal.pose}")
                 
         # 1. Wait for goal acceptance
         send_goal_future = self.nav_client.send_goal_async(goal)

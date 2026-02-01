@@ -8,19 +8,11 @@ import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.action import ActionClient
-from rclpy.duration import Duration
-from geometry_msgs.msg import PoseStamped, Twist, TransformStamped
-from action_msgs.msg import GoalStatus
-from trajectory_msgs.msg import JointTrajectoryPoint
-from nav2_msgs.action import NavigateToPose
-from control_msgs.action import FollowJointTrajectory
-from tf2_ros.buffer import Buffer
-from tf2_ros.transform_listener import TransformListener
-from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
-from tf2_geometry_msgs import do_transform_pose
+from geometry_msgs.msg import PoseStamped
 
-from exam_interfaces.msg import MoveHead
+# Custom Services
+from exam_interfaces.srv import InitGoals
+from exam_interfaces.srv import GetNextGoal
 
 # Python Standard Libraries
 import yaml
@@ -28,85 +20,7 @@ import os
 import cv2
 import numpy as np
 import random
-import math
-import time
-import datetime
 from threading import Thread
-from enum import Enum
-
-
-##################################
-# State Class
-##################################
-class State(Enum):
-    INIT = 0
-    EXPLORING = 1
-    TRACKING = 2
-    INSPECTING = 3
-    HOMING = 4
-    DONE = 5
-
-
-##################################
-# Helper Function
-##################################
-def generate_random_goal(map_path: str, num_goals: int, clearance: float = 0.4) -> tuple[list, list]:
-    """
-    Generates random goal coordinates within the map that are safe based on the specified clearance.
-
-    Parameters
-    ----------
-    map_path : str
-        The file path to the map YAML file.
-    num_goals : int
-        The number of random goals to generate.
-    clearance : float, optional
-        The minimum clearance distance from obstacles in meters, by default 0.4
-
-    Returns
-    -------
-    tuple[list, list]
-        Two lists containing the x and y coordinates of the generated goals.
-    """
-    try:
-        # Open and parse the map YAML file
-        with open(map_path, 'r') as f:
-            map_data = yaml.safe_load(f)
-
-        # Extract map parameters
-        resolution = map_data['resolution']
-        origin = map_data['origin'] # world origin (bottom-left corner) ||| pixel origin (top-left corner)
-
-        # Load the map image
-        pgm_path = os.path.join(os.path.dirname(map_path), map_data['image'])
-        img = cv2.imread(pgm_path, cv2.IMREAD_GRAYSCALE)
-        if img is None: return [], []
-
-        # Create binary map
-        _, binary_map = cv2.threshold(img, 250, 255, cv2.THRESH_BINARY)
-
-        # Compute distance transform
-        dist_map = cv2.distanceTransform(binary_map, cv2.DIST_L2, 5)
-
-        # Identify safe pixels based on clearance
-        safe_indices = np.where(dist_map >= (clearance / resolution))
-
-        # Generate whitelist of safe pixels
-        whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
-        if not whitelist_pixels: return [], []
-        wx, wy = [], []
-        h, w = img.shape
-
-        # Randomly select goal pixels and convert to world coordinates
-        for _ in range(num_goals):
-            r, c = random.choice(whitelist_pixels) # row, col (pixel coordinates)
-            wx.append(origin[0] + c * resolution) # x, y (world coordinates)
-            wy.append(origin[1] + (h - r) * resolution -1.3)
-        return wx, wy
-    except Exception as e:
-        print(f"Map Error: {e}")
-        return [], []
-
 
 ##################################
 # Naive Explorer Node
@@ -120,33 +34,11 @@ class NaiveExplorer(Node):
         ##################################
         self.cb_group = ReentrantCallbackGroup()
         
-        ##################################
-        # Action Clients
-        ##################################
-        self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose', callback_group=self.cb_group)
-        self.head_client = ActionClient(self, FollowJointTrajectory, '/head_controller/follow_joint_trajectory', callback_group=self.cb_group)
-        
-        ##################################
-        # Subscribers
-        ##################################
-        self.create_subscription(PoseStamped, 'move_to_marker', self.marker_approach_callback, 10, callback_group=self.cb_group)
-        self.create_subscription(PoseStamped, 'detected_marker_real_pose', self.real_marker_callback, 10, callback_group=self.cb_group)
-        
-        
-        self.create_subscription(MoveHead, 'move_head', self.move_head_callback, 10, callback_group=self.cb_group)
-        
-        self.head_pan = 0.0
-        self.head_tilt = 0.0
-
-        
-        
-
-        ##################################
-        # TF Setup
-        ##################################
-        self.tf_static_broadcaster = StaticTransformBroadcaster(self)
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+        #################################
+        # Client Services
+        #################################
+        self.create_service(InitGoals, 'init_goals', self.init_goals_callback, callback_group=self.cb_group)
+        self.create_service(GetNextGoal, 'get_next_goal', self.get_next_goal_callback, callback_group=self.cb_group)
 
         ##################################
         # Class Parameters
@@ -154,449 +46,154 @@ class NaiveExplorer(Node):
         # Retrieve paths
         ws_src_path = os.path.join(os.path.expanduser('~'), 'tiago_gh_ws/src/tiago_exam')
         map_path_dir = os.path.join(ws_src_path, 'maps')
-        data_path_dir = os.path.join(ws_src_path, 'data')
         
         # Declare parameters fallback
         self.map_path = self.declare_parameter('map_path', os.path.join(map_path_dir, 'group29_env_map.yaml')).get_parameter_value().string_value
-        self.marker_file_path = self.declare_parameter('marker_file_path', os.path.join(data_path_dir, 'marker_locations.csv')).get_parameter_value().string_value
-        self._init_marker_file()
         
         ##################################
         # State Variables
         ##################################
-        self.state = State.INIT
-        self.home_pose = None
         self.exploration_goals = []
-        self.init_goals = 5
-        self.clearance = 0.5
+        self.init_goals = None
+        self.clearance = None
         self.current_expl_goal_idx = 0
-        
-        ##################################
-        # Marker Tracking Variables
-        ##################################
-        self.found_markers = set()
-        self.target_marker_pose = None
-        self.target_marker_id = None
-        self.is_new_marker_detected = False
-        self.last_valid_real_pose = None
-        
-     
+
         self.get_logger().info("Explorer Initialized.")
-
-    ##################################
-    # Helper Methods
-    ##################################
-    def _init_marker_file(self):
-        """
-        Initializes the marker CSV file with headers.
-        """
-        # Ensure the directory exists
-        output_folder = os.path.dirname(os.path.abspath(self.marker_file_path))
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
-            self.get_logger().info(f"Folder created: {output_folder}")
-
-        # Create or overwrite the CSV file with headers
-        try:
-            with open(self.marker_file_path, 'w') as f:
-                f.write("timestamp,id,x,y,z,qx,qy,qz,qw\n")
-            self.get_logger().info(f"File CSV initialized at: {self.marker_file_path}")
-        except Exception as e:
-            self.get_logger().error(f"Error initializing file: {e}")
 
     ##################################
     # Callbacks
     ##################################
-    def marker_approach_callback(self, msg: PoseStamped) -> None:
+    def init_goals_callback(self, request, response):
         """
-        This callback is triggered when a new marker approach goal is published. It checks if the marker has already been found.
-        If it's a new marker, it updates the target marker pose and ID, and sets a flag to indicate a new marker has been detected.
+        Service callback to generate new exploration goals.
 
         Parameters
         ----------
-        msg : PoseStamped
-            The pose of the detected marker to approach.
-        """
-        # Extract marker ID from frame_id
-        marker_id = msg.header.frame_id
-        
-        # Ignore if already found
-        if marker_id in self.found_markers:
-            return
-
-        # Spot new marker pose found
-        self.target_marker_pose = msg
-        self.target_marker_id = marker_id
-        
-        # Fix z position to 0 and frame_id to 'map' for Nav2 stack
-        self.target_marker_pose.header.frame_id = 'map'
-        self.target_marker_pose.pose.position.z = 0.0
-
-        # Set new marker detected flag
-        if self.state == State.EXPLORING:
-            # Raise flag for the first time only to avoid multiple interrupts in the same exploration goal
-            if not self.is_new_marker_detected:
-                self.is_new_marker_detected = True
-                self.get_logger().info(f"MARKER DETECTED: {marker_id}")
-
-    def real_marker_callback(self, msg: PoseStamped) -> None:
-        """
-        This callback is triggered when a new real pose of the detected marker is published. It updates the last valid real pose.
-
-        Parameters
-        ----------
-        msg : PoseStamped
-            The real pose of the detected marker.
-        """
-        self.last_valid_real_pose = msg
-        
-    def move_head_callback(self, msg: MoveHead) -> None:
-        """
-        This callback is triggered when a new head movement command is published. It updates the head pan and tilt angles.
-
-        Parameters
-        ----------
-        msg : MoveHead
-            The head movement command containing pan and tilt angles.
-        """
-        self.head_pan = msg.pan
-        self.head_tilt = msg.tilt
-        
-    
-    ##################################
-    # Motion Methods
-    ##################################
-    def send_nav_goal(self, pose: PoseStamped):
-        """
-        Sends a navigation goal to the NAV2 stack.
-        
-        Parameters
-        ----------
-        pose : PoseStamped
-            The target pose for navigation.
+        request : InitGoals.Request
+            The service request (not used).
+        response : InitGoals.Response
+            The service response (not used).
 
         Returns
         -------
-        goal_handle : ActionClient.GoalHandle
-            The goal handle returned by the NAV2 action server.
+        InitGoals.Response
+            The service response.
         """
-        # Wait for the Nav2 action server to be available
-        if not self.nav_client.wait_for_server(2.0):
-            self.get_logger().error("Nav2 Action Server not available")
-            return None
         
-        # Initialize goal
-        goal = NavigateToPose.Goal()
-        goal.pose = pose
-        goal.pose.header.stamp = self.get_clock().now().to_msg()
-        goal.pose.pose.position.z = 0.0
+        self.get_logger().info("Initializing Exploration Goals...")
+        self.init_goals = request.init_goals 
+        self.clearance = request.clearance
         
-        # Send goal
-        future = self.nav_client.send_goal_async(goal)
-
-        # Brief wait to ensure the goal has been sent
-        # TODO : It uses a timeout while which is not ideal, but avoids blocking the state machine indefinitely
-        # TODO : It would be better to implement a proper async wait with a callback, that for instance sets a flag when done
-        # TODO : Can be addressed by spinning the executor in a separate thread
-        start = time.time()
-        while not future.done():
-            if time.time() - start > 2.0: return None
-            time.sleep(0.05)
-        
-        # Get goal handle
-        gh = future.result()
-        if not gh.accepted:
-            self.get_logger().error("Nav Goal Rejected")
-            return None
-        return gh
-
-    
-
-    def move_head(self, pan: float, tilt: float) -> None:
-        # 1. Verifica rapida senza attendere troppo
-        if not self.head_client.server_is_ready():
-            self.get_logger().warn("Head Action Server non pronto, salto movimento")
-            return
-        
-        g = FollowJointTrajectory.Goal()
-        g.trajectory.joint_names = ['head_1_joint', 'head_2_joint']
-        
-        pt = JointTrajectoryPoint()
-        pt.positions = [float(pan), float(tilt)]
-        # Riduciamo il tempo per rendere la testa reattiva (es. 0.5s invece di 2s)
-        pt.time_from_start = Duration(seconds=0.5).to_msg()
-        g.trajectory.points = [pt]
-        
-        # 2. Invia e dimentica (Asincrono vero)
-        # Non mettiamo i "while not f.done()" qui!
-        self.head_client.send_goal_async(g)
-
-    def generate_goals(self):
-        """
-        Generates random exploration goals within the map.
-        """
-        wx, wy = generate_random_goal(self.map_path, self.init_goals, self.clearance)
+        wx, wy = self.generate_random_goals()
         self.exploration_goals = []
+        
         if wx:
             for x, y in zip(wx, wy):
                 p = PoseStamped()
                 p.header.frame_id = 'map'
                 p.pose.position.x, p.pose.position.y = float(x), float(y)
-                p.pose.orientation.w = 1.0
+                
+                random_yaw = random.uniform(0, 2 * np.pi)
+
+                # 2. Convert Yaw (Z-axis rotation) to Quaternion
+                # Formula: x=0, y=0, z=sin(yaw/2), w=cos(yaw/2)
+                p.pose.orientation.x = 0.0
+                p.pose.orientation.y = 0.0
+                p.pose.orientation.z = np.sin(random_yaw / 2.0)
+                p.pose.orientation.w = np.cos(random_yaw / 2.0)
+                
                 self.exploration_goals.append(p)
             self.current_expl_goal_idx = 0
+            
+        success = len(self.exploration_goals) == self.init_goals
+        response.success = success
+        
+        return response
     
     ##################################
-    # Save Marker Method
+    # Helper Functions
     ##################################
-    def save_current_marker(self) -> None:
+    def generate_random_goals(self) -> tuple[list, list]:
         """
-        Saves the current target marker's real pose to the CSV file and broadcasts its static TF.
+        Generates random goal coordinates within the map that are safe based on the specified clearance.
+
+        Parameters
+        ----------
+        map_path : str
+            The file path to the map YAML file.
+        num_goals : int
+            The number of random goals to generate.
+        clearance : float, optional
+            The minimum clearance distance from obstacles in meters, by default 0.4
+
+        Returns
+        -------
+        tuple[list, list]
+            Two lists containing the x and y coordinates of the generated goals.
         """
-        # Retrieve last valid pose
-        pose = self.last_valid_real_pose
-        if pose and self.target_marker_id:
-            # Extract Marker Pose
-            x = pose.pose.position.x
-            y = pose.pose.position.y
-            z = pose.pose.position.z
-            qx = pose.pose.orientation.x
-            qy = pose.pose.orientation.y
-            qz = pose.pose.orientation.z
-            qw = pose.pose.orientation.w
+        try:
+            # Open and parse the map YAML file
+            with open(self.map_path, 'r') as f:
+                map_data = yaml.safe_load(f)
 
-            # Extract TargetMarker Pose
-            x_target = self.target_marker_pose.pose.position.x
-            y_target = self.target_marker_pose.pose.position.y
-            z_target = self.target_marker_pose.pose.position.z
-            qx_target = self.target_marker_pose.pose.orientation.x
-            qy_target = self.target_marker_pose.pose.orientation.y
-            qz_target = self.target_marker_pose.pose.orientation.z
-            qw_target = self.target_marker_pose.pose.orientation.w
+            # Extract map parameters
+            resolution = map_data['resolution']
+            origin = map_data['origin'] # world origin (bottom-left corner) ||| pixel origin (top-left corner)
 
-            # Extract timestamp
-            ts = datetime.datetime.now().strftime("%H:%M:%S")
+            # Load the map image
+            pgm_path = os.path.join(os.path.dirname(self.map_path), map_data['image'])
+            img = cv2.imread(pgm_path, cv2.IMREAD_GRAYSCALE)
+            if img is None: return [], []
 
-            # Append to CSV file
-            with open(self.marker_file_path, 'a') as f:
-                f.write(f"{ts},{self.target_marker_id},{x:.3f},{y:.3f},{z:.3f},{qx:.3f},{qy:.3f},{qz:.3f},{qw:.3f}\n")
-                f.write(f"{ts},target_{self.target_marker_id},{x_target:.3f},{y_target:.3f},{z_target:.3f},{qx_target:.3f},{qy_target:.3f},{qz_target:.3f},{qw_target:.3f}\n")
-            
-            # Broadcast static TF
-            t_marker = TransformStamped()
-            t_marker.header.stamp = self.get_clock().now().to_msg()
-            t_marker.header.frame_id = 'map'
-            t_marker.child_frame_id = str(self.target_marker_id)
-            t_marker.transform.translation.x = x
-            t_marker.transform.translation.y = y
-            t_marker.transform.translation.z = z
-            t_marker.transform.rotation = pose.pose.orientation
+            # Create binary map
+            _, binary_map = cv2.threshold(img, 250, 255, cv2.THRESH_BINARY)
 
-            t_target = TransformStamped()
-            t_target.header.stamp = self.get_clock().now().to_msg()
-            t_target.header.frame_id = 'map'
-            t_target.child_frame_id = "target_" + str(self.target_marker_id)
-            t_target.transform.translation.x = x_target
-            t_target.transform.translation.y = y_target
-            t_target.transform.translation.z = z_target
-            t_target.transform.rotation = self.target_marker_pose.pose.orientation
-            self.tf_static_broadcaster.sendTransform([t_marker, t_target])
-            
-            self.found_markers.add(self.target_marker_id)
-            self.get_logger().info(f"SAVED: {self.target_marker_id}")
+            # Compute distance transform
+            dist_map = cv2.distanceTransform(binary_map, cv2.DIST_L2, 5)
 
-    ##################################
-    # STATE MACHINE
-    ##################################
-    def run_state_machine(self):
-        """
-        Runs the main state machine for the naive explorer.
-        """
-        time.sleep(1.0)
+            # Identify safe pixels based on clearance
+            safe_indices = np.where(dist_map >= (self.clearance / resolution))
+
+            # Generate whitelist of safe pixels
+            whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
+            if not whitelist_pixels: return [], []
+            wx, wy = [], []
+            h, w = img.shape
+
+            # Randomly select goal pixels and convert to world coordinates
+            for _ in range(self.init_goals):
+                r, c = random.choice(whitelist_pixels) # row, col (pixel coordinates)
+                wx.append(origin[0] + c * resolution) # x, y (world coordinates)
+                wy.append(origin[1] + (h - r) * resolution -1.3)
+            return wx, wy
+        except Exception as e:
+            print(f"Map Error: {e}")
+            return [], []
+
+    def get_next_goal_callback(self, request, response):
+        response.success = True
+        response.is_last_goal = False
         
-        while rclpy.ok():
-            
-            match self.state:
-                
-                # --- INIT ---
-                case State.INIT:
-                    self.get_logger().info("--- State: INIT ---")
-                    # Save the home pose
-                    self.home_pose = PoseStamped()
-                    self.home_pose.header.frame_id = 'map'
-                    self.home_pose.pose.orientation.w = 1.0
-                
-                    # Move head to home
-                    self.move_head(0.0, 0.0)
 
-                    # Generate initial exploration goals
-                    self.generate_goals()
+        self.get_logger().info(f"Requesting Next Exploration Goal {self.current_expl_goal_idx+1}")
 
-                    # Switch to EXPLORING state
-                    self.state = State.EXPLORING
+        # Add exploration goals if finished
+        if self.current_expl_goal_idx >= len(self.exploration_goals):
+            response.is_last_goal = True
+            return response
 
-                # --- EXPLORING ---
-                case State.EXPLORING:
-                    self.get_logger().info(f"--- State: EXPLORING ---")
-                    # Add exploration goals if finished
-                    if self.current_expl_goal_idx >= len(self.exploration_goals):
-                        # If less than 2 markers found, generate new goals
-                        if len(self.found_markers) < 2:
-                            self.generate_goals()
-                        else:
-                            self.state = State.HOMING
-                            continue
+        # Retrieve current exploration goal
+        goal = self.exploration_goals[self.current_expl_goal_idx]
+        self.get_logger().info(f"Exploration Goal {self.current_expl_goal_idx+1}")
 
-                    # Retrieve current exploration goal
-                    goal = self.exploration_goals[self.current_expl_goal_idx]
-                    self.get_logger().info(f"Exploration Goal {self.current_expl_goal_idx+1}")
-
-                    # Send navigation goal
-                    gh = self.send_nav_goal(goal)
+        # Send navigation goal
+        response.next_goal = goal
+        self.current_expl_goal_idx += 1
+        
+        
+        
+        return response
                     
-                    # Wait for result or interrupt
-                    if not gh:
-                        self.current_expl_goal_idx += 1
-                        continue
-                    
-                    # Monitor goal execution
-                    res_future = gh.get_result_async()
-
-                    # Reset new marker detected flag
-                    self.is_new_marker_detected = False
-                    
-                    
-                    
-                    # Wait for goal completion or interrupt
-                    while not res_future.done():
-                        # Check for new marker detection interrupt
-                        if self.is_new_marker_detected:
-                            self.get_logger().info("INTERRUPT: Canceling goal...")
-
-                            # Cancel current goal
-                            gh.cancel_goal_async()
-                            
-                            # Wait for nav2 to confirm cancellation
-                            while not res_future.done():
-                                time.sleep(0.1)
-
-                            self.get_logger().info("Exploration canceled. Switching to TRACKING.")
-
-                            # Switch to TRACKING state
-                            self.state = State.TRACKING
-                            break
-                        time.sleep(0.1)
-                    
-                    if self.state == State.TRACKING:
-                        pass 
-                    else:
-                        self.current_expl_goal_idx += 1
-
-                                
-                # --- TRACKING  ---
-                case State.TRACKING:
-                    self.get_logger().info("--- State: TRACKING ---")
-                    self.get_logger().info(f"Tracking: {self.target_marker_id}")
-
-                    # Check if we have a valid target marker pose, otherwise return to EXPLORING
-                    if not self.target_marker_pose:
-                        self.state = State.EXPLORING
-                        continue
-                    
-                    # Send Initial Goal
-                    current_active_goal = self.target_marker_pose
-                    gh = self.send_nav_goal(current_active_goal)
-                    
-                    if not gh:
-                        self.state = State.EXPLORING
-                        continue
-
-                    # Monitoring loop with updates
-                    nav_result_future = gh.get_result_async()
-                    
-                    while not nav_result_future.done():
-                        # Check for updates every 0.2 seconds
-                        time.sleep(0.2)
-                        
-                        if self.target_marker_pose:
-                            # Compute distance between current goal and new marker estimate
-                            dx = self.target_marker_pose.pose.position.x - current_active_goal.pose.position.x
-                            dy = self.target_marker_pose.pose.position.y - current_active_goal.pose.position.y
-                            
-                    
-                            # Use the non-blocking move_head you created to keep the loop fluid
-                            self.move_head(self.head_pan, self.head_tilt)
-                                                    
-                            # # Compute distance difference
-                            dist_diff = math.sqrt(dx**2 + dy**2)
-                        
-                            # If the estimated position has changed by > 5cm, UPDATE THE GOAL!
-                            if dist_diff > 0.10: 
-                                self.get_logger().info(f"Refining Target (Correction: {dist_diff:.2f}m)...")
-                                current_active_goal = self.target_marker_pose
-                                
-                                # Send a new goal which preempts (cancels) the old one automatically in Nav2
-                                gh = self.send_nav_goal(current_active_goal)
-                                if gh:
-                                    nav_result_future = gh.get_result_async()
-                                else:
-                                    # If sending fails, exit
-                                    break
-
-                    # Fine tracking (success or failure of the last goal)
-                    if gh:
-                        # Final status check
-                        if not nav_result_future.done(): 
-                            # Rare case if we exit the loop due to break
-                            pass
-                        elif nav_result_future.result().status == GoalStatus.STATUS_SUCCEEDED:
-                            self.get_logger().info("Arrived at target.")
-                            self.state = State.INSPECTING
-                        else:
-                            self.get_logger().warn("Tracking failed. Retrying exploration.")
-                            self.state = State.EXPLORING
-                    else:
-                        self.state = State.EXPLORING
-
-                # --- INSPECTING ---
-                case State.INSPECTING:
-                    self.get_logger().info("--- State: INSPECTING ---")
-                    
-                    # Save marker info
-                    self.save_current_marker()
-
-                    # Return head to home
-                    self.move_head(0.0, 0.0)
-                    
-                    # Return to EXPLORING or HOMING based on found markers
-                    if len(self.found_markers) >= 2:
-                        self.state = State.HOMING
-                    else:
-                        self.state = State.EXPLORING
-
-                # --- HOMING ---
-                case State.HOMING:
-                    self.get_logger().info("--- State: HOMING ---")
-                    gh = self.send_nav_goal(self.home_pose)
-
-                    if gh:
-                        res_future = gh.get_result_async()
-                        while not res_future.done():
-                            time.sleep(0.1)
-                        
-                        if res_future.result().status == GoalStatus.STATUS_SUCCEEDED:
-                            self.get_logger().info("Returned Home Successfully.")
-                        else:
-                            self.get_logger().error("Failed to Return Home.")
-                    
-                    self.state = State.DONE
-
-                # --- DONE ---
-                case State.DONE:
-                    self.get_logger().info("--- State: DONE ---")
-                    # End state machine
-                    break
-
 
 ##################################
 # Main Method
@@ -605,9 +202,6 @@ def main(args=None):
     rclpy.init(args=args)
     node = NaiveExplorer()
 
-    th = Thread(target=node.run_state_machine, daemon=True)
-    th.start()
-    
     executor = MultiThreadedExecutor()
     executor.add_node(node)
 

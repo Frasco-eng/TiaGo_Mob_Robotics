@@ -15,7 +15,7 @@ from rclpy.executors import MultiThreadedExecutor
 # Custom Service
 from exam_interfaces.srv import MoveHead
 
-
+import time
 JOINT_NAMES = [
     'head_1_joint',  # Pan
     'head_2_joint'   # Tilt
@@ -33,59 +33,44 @@ class HeadMotionService(Node):
     def __init__(self):
         super().__init__('head_motion_service')
 
-        ##################################
-        # Callback Group
-        ##################################
         self.cb_group = ReentrantCallbackGroup()
         
-        ##################################
-        # Service Server
-        ##################################
         self.srv = self.create_service(MoveHead, 'move_head_srv', self.handle_move_head, callback_group=self.cb_group)
-        
-        ##################################
-        # Action Client
-        ##################################
         self.head_client = ActionClient(self, FollowJointTrajectory, '/head_controller/follow_joint_trajectory', callback_group=self.cb_group)
 
         self.get_logger().info("Head Motion Service Ready.")
 
-    ##################################
-    # Callbacks
-    ##################################
     def handle_move_head(self, request, response):
-        self.get_logger().info(f"Request received: Pan={request.pan}, Tilt={request.tilt}")
-
-        # Check if the controller is available
-        if not self.head_client.wait_for_server(timeout_sec=2.0):
+        # Check server availability
+        if not self.head_client.wait_for_server(timeout_sec=1.0):
             self.get_logger().error("Head controller not available!")
             response.success = False
             return response
 
-        # Prepare the goal
+        # Prepare Goal
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = JOINT_NAMES
         pt = JointTrajectoryPoint()
         pt.positions = [float(request.pan), float(request.tilt)]
-        pt.time_from_start = Duration(sec=0, nanosec=500_000_000)  # 0.5 seconds to reach the
+        pt.time_from_start = Duration(sec=0, nanosec=500_000_000)
         goal.trajectory.points = [pt]
 
-        # Send the goal
+        # 1. Send Goal (Async -> Wait for result)
         send_goal_future = self.head_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, send_goal_future)
+        
+        while not send_goal_future.done():
+            time.sleep(0.1) 
+            
         goal_handle = send_goal_future.result()
 
         if not goal_handle.accepted:
             response.success = False
-            return response
-        
-        # Wait for the final result of the motion
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
-        
-        response.success = True
-        self.get_logger().info("Head motion completed.")
+            
+        else:
+            response.success = True
+            
         return response
+            
 
 ##################################
 # Main Function
