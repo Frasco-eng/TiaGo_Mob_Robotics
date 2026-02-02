@@ -6,7 +6,6 @@
 # ROS2 Libraries
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Pose
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
@@ -19,7 +18,11 @@ from exam_interfaces.srv import SaveMarker
 import os
 import csv
 import datetime
+from tiago_exam import utils
 
+##################################
+# ArucoNoter Class
+##################################
 class ArucoNoter(Node):
 
     def __init__(self):
@@ -33,8 +36,8 @@ class ArucoNoter(Node):
         ##################################
         # Class Parameters
         ##################################
-        ws_src_path = os.path.join(os.path.expanduser('~'), 'tiago_gh_ws/src/tiago_exam')
-        data_path_dir = os.path.join(ws_src_path, 'data')
+        ws_src_dir = utils.get_package_src_directory('tiago_exam')
+        data_path_dir = os.path.join(ws_src_dir, 'data')
         self.declare_parameter('marker_file_path', os.path.join(data_path_dir, 'marker_locations.csv'))
         self.marker_file_path = self.get_parameter('marker_file_path').get_parameter_value().string_value
 
@@ -56,29 +59,26 @@ class ArucoNoter(Node):
         
         self.get_logger().info("Aruco Noter Service Ready. Waiting for requests...")
 
-    def _init_marker_file(self):
+    ##################################
+    # Callback
+    ##################################
+    def save_marker_callback(self, request, response) -> SaveMarker.Response:
         """
-        Initializes the marker CSV file with headers.
-        """
-        # Ensure the directory exists
-        output_folder = os.path.dirname(os.path.abspath(self.marker_file_path))
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
-            self.get_logger().info(f"Folder created: {output_folder}")
-            
-        try:
-            with open(self.marker_file_path, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(["timestamp", "name", "x", "y", "z", "qx", "qy", "qz", "qw"])
-            self.get_logger().info(f"File CSV initialized at: {self.marker_file_path}")
-        except Exception as e:
-            self.get_logger().error(f"Error initializing file: {e}")
+        Callback function to save marker data to CSV and broadcast static TF.
 
-    def save_marker_callback(self, request, response):
+        Parameters
+        ----------
+        request : SaveMarker.Request
+            The service request containing marker name and pose.
+        response : SaveMarker.Response
+            The service response indicating success or failure.
+        """
         try:
+            # Get current timestamp
             now = datetime.datetime.now()
             timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
+            # Write to CSV in append mode
             with open(self.marker_file_path, 'a', newline='') as f:
                 writer = csv.writer(f)
                 
@@ -94,6 +94,7 @@ class ArucoNoter(Node):
                     f"{q.x:.4f}", f"{q.y:.4f}", f"{q.z:.4f}", f"{q.w:.4f}"
                 ])
 
+            # Update logged markers
             self.logged_markers.add(request.name)
             self.get_logger().info(f"Saved: {request.name}")
             
@@ -119,6 +120,27 @@ class ArucoNoter(Node):
             response.success = False
 
         return response
+    
+    ##################################
+    # Helper Method
+    ##################################
+    def _init_marker_file(self):
+        """
+        Initializes the marker CSV file with headers.
+        """
+        # Ensure the directory exists
+        output_folder = os.path.dirname(os.path.abspath(self.marker_file_path))
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+            self.get_logger().info(f"Folder created: {output_folder}")
+            
+        try:
+            with open(self.marker_file_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "name", "x", "y", "z", "qx", "qy", "qz", "qw"])
+            self.get_logger().info(f"File CSV initialized at: {self.marker_file_path}")
+        except Exception as e:
+            self.get_logger().error(f"Error initializing file: {e}")
     
 
 ##################################

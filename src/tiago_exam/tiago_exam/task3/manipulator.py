@@ -66,7 +66,7 @@ JOINT_GRIPPER_NAMES = [
 # Gripper Constants
 ##################################
 OPEN_GRIPPER_JOINT_POSITIONS = [0.044, 0.044]
-CLOSED_GRIPPER_JOINT_POSITIONS = [0.034, 0.034]
+CLOSED_GRIPPER_JOINT_POSITIONS = [0.032, 0.032]
 GRIPPER_GROUP_NAME = "gripper"
 GRIPPER_COMMAND_ACTION_NAME = "gripper_controller/joint_trajectory"
 
@@ -99,8 +99,20 @@ class Manipulator(Node):
             group_name="arm_torso",
             callback_group=self.callback_group_arm,
         )
+
+        # Bidirectional RRT
         self.arm.planner_id = "RRTConnectkConfigDefault"
+
+        # Add collision objects
+        # self.arm.add_collision_box(id='env_exam_pick_surface',
+        #                                 position=[-3.0, -4.0, 0.15],
+        #                                 quat_xyzw=[0.0, 0.0, -0.7071, 0.7071],
+        #                                 size=[0.5, 0.5, 0.3])
         
+        # self.arm.add_collision_box(id='env_exam_place_surface',
+        #                                 position=[0.0, -7, 0.15],
+        #                                 quat_xyzw=[0.0, 0.0, -0.7071434, 0.7070701],
+        #                                 size=[0.5, 0.5, 0.3])    
 
         # Gripper Interface
         self.gripper = GripperInterface(
@@ -117,17 +129,17 @@ class Manipulator(Node):
         # Velocity and Acceleration Limits
         ##################################
         self.arm.max_velocity = 1.0
-        self.arm.max_acceleration = 1.0
+        self.arm.max_acceleration = 0.5
         self.gripper.max_velocity = 1.0
         self.gripper.max_acceleration = 1.0
-        self.safe_joints_position = [0.10, 0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00, 0.04]
+        self.safe_joints_position = [0.0, 0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00, 0.04]
 
         ##################################
         # FT Sensor Variables
         ##################################
         self.current_force = 0.0
         self.force_threshold = 5.0  # Newtons
-
+   
         ##################################
         # State Variables
         ##################################
@@ -212,40 +224,7 @@ class Manipulator(Node):
         success = self.arm.wait_until_executed()
         return success
     
-    def sensitive_grasp(self) -> bool:
-        """
-        Chiude la pinza gradualmente finché non rileva una forza o raggiunge il limite.
-        """
-        self.get_logger().info("Starting Sensitive Grasp...")
-        
-        # Parametri
-        step_size = 0.001  # Chiudi di 1mm alla volta (più è piccolo, più è sicuro ma lento)
-        min_position = 0.005 # Non chiudere oltre questo (sicurezza)
-        
-        # Posizione attuale (dovresti leggerla dai joint states, qui assumiamo aperta)
-        current_pos = 0.08 # Pinza tutta aperta (checka il valore reale OPEN)
-        
-        while current_pos > min_position:
-            # 1. Controlla la forza PRIMA di muovere
-            if self.current_force > self.force_threshold:
-                self.get_logger().info(f"Force threshold reached: {self.current_force:.2f} N. STOPPING.")
-                return True # Presa riuscita (abbiamo toccato qualcosa)
-                
-            # 2. Calcola prossimo step
-            target_pos = current_pos - step_size
-            
-            # 3. Muovi la pinza
-            # Nota: gripper.move() deve essere bloccante o devi aspettare qui
-            self.gripper.move(target_pos) 
-            # Importante: dai tempo al sensore di aggiornarsi e alla fisica di reagire
-            time.sleep(0.1) 
-            
-            # Aggiorna pos virtuale (meglio sarebbe leggere joint_states reali)
-            current_pos = target_pos
-            
-        self.get_logger().warn("Grasp finished without detecting force (Closed fully).")
-        return False # Ha chiuso tutto senza toccare nulla (o sensore non funziona)
-    
+   
     ##################################
     # STATE MACHINE
     ##################################
@@ -258,20 +237,23 @@ class Manipulator(Node):
                 case State.MOVE_TO_PRE_GRASP:
                     self.get_logger().info("--- State: MOVE_TO_PRE_GRASP ---")
 
-                    # Open gripper
-                    self.gripper.open()
-                    self.gripper.wait_until_executed()
-
+                    
                     # Compute pre-grasp pose                    
                     self.base_T_marker.M = self.base_T_marker.M * kdl.Rotation.RotY(np.pi/2)
-                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.3, 0.0, 0.0))
+                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.4, 0.0, 0.0))
 
                     base_T_approach = self.base_T_marker * approach_twist
                     
                     pre_grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
                          
                     if self.call_move_arm_srv(pre_grasp_pose):
+                        # Open gripper
+                        self.gripper.open()
+                        self.gripper.wait_until_executed()
+                                      
                         self.current_state = State.MOVE_TO_GRASP
+                        
+
                     else:
                         self.get_logger().error("Failed to reach Pre-Grasp")
                         self.task_success = False
@@ -281,11 +263,12 @@ class Manipulator(Node):
                 case State.MOVE_TO_GRASP:
                     self.get_logger().info("--- State: MOVE_TO_GRASP ---")
                     
-                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.05, 0.0, 0.0))
+                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.03, 0.0, 0.0))
                     base_T_approach = self.base_T_marker * approach_twist
 
                     grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
 
+                    
                     if self.call_move_arm_srv(grasp_pose):
                         self.current_state = State.GRASP
                     else:
@@ -297,21 +280,21 @@ class Manipulator(Node):
                 case State.GRASP:
                     self.get_logger().info("--- State: GRASP ---")
 
-                    # Close gripper
+                    # # Close gripper
                     self.gripper.close()
                     self.gripper.wait_until_executed()
 
                     # if self.sensitive_grasp():
                     #     self.get_logger().info("Object grasped with correct force.")
-                    # else:
-                    #     self.get_logger().warn("Grasping failed or nothing found.")
+                    #else:
+                        # self.get_logger().warn("Grasping failed or nothing found.")
                     
-                    time.sleep(1.0)  # Wait for a moment to ensure a firm grasp
+                    time.sleep(10.0)  # Wait for a moment to ensure a firm grasp: physics settling time
                     
                     self.current_state = State.POST_GRASP
                     
                 case State.POST_GRASP:
-                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.3, 0.0, 0.0))
+                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.4, 0.0, 0.0))
                     base_T_approach = self.base_T_marker * approach_twist
 
                     grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)

@@ -11,6 +11,14 @@ import math
 # Utility Functions
 ##################################
 def get_package_src_directory(package_name):
+    """
+    Returns the source directory path of the given package within a standard ROS2 workspace.
+
+    Parameters
+    ----------
+    package_name : str
+        Name of the ROS2 package.
+    """
     install_path = get_package_share_directory(package_name)
     
     # install_path: .../workspace/install/nome_pkg/share/pkg_name
@@ -47,9 +55,11 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
     list of float
         Random pose [x, y, z, theta] in world coordinates.
     """
+    # Seed random seed based on time
     random.seed(time.time())
     
     print(f"Generating random pose from map: {map_path} with clearance {clearance}m")
+
     try: 
         # Load map YAML
         with open(map_path, 'r') as f:
@@ -65,19 +75,17 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         if img is None:
             raise FileNotFoundError(f"Map Image not found: {pgm_path}")
 
-                
-        
-        # 1. Threshold strictly: only 255 (white) is truly free
+
+        # Threshold the image to binary (Free: 255, Occupied: 0)
         _, binary_map = cv2.threshold(img, 250, 255, cv2.THRESH_BINARY)
 
-        # 2. Compute distance from obstacles (0s)
+        # Compute distance transform
         dist_map = cv2.distanceTransform(binary_map, cv2.DIST_L2, 5)
 
-        # 3. Convert clearance meters to pixels
-        # Add a small buffer (e.g., 0.1m) to account for robot footprint
+        # Convert clearance meters to pixels
         effective_clearance_px = (clearance + 0.1) / resolution
 
-        # 4. Filter pixels that satisfy the clearance
+        # Filter pixels that satisfy the clearance
         safe_indices = np.where(dist_map >= effective_clearance_px)
         whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
 
@@ -90,8 +98,9 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
             os.makedirs(temp_dir_path)
         debug_image_path = os.path.join(temp_dir_path, 'debug_map.png')
         cv2.imwrite(debug_image_path, debug_img)
-        print(f"Safe spawn pixels image saved to /temp/debug_safe_spawn.png")
-
+        print(f"Safe spawn pixels image saved to {debug_image_path}")
+        
+        # If no safe pixels found, relax clearance requirement
         if not whitelist_pixels:
             print("No safe pixels found! Reducing clearance requirements...")
             # Fallback: find the max distance available if requested clearance is too high
@@ -99,14 +108,11 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
             safe_indices = np.where(dist_map >= max_dist * 0.9)
             whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
 
-        # 5. Pick and Convert
+        # Pick and Convert
         pixel_r, pixel_c = random.choice(whitelist_pixels)
         height, width = img.shape
         
         # Standard ROS Map Transform
-        # world_x = origin[0] + (pixel_c * resolution) 
-        # world_y = origin[1] + ((height - pixel_r) * resolution) - safe_coords[1] # Using height-pixel_r
-
         world_x = origin[0] + (pixel_c * resolution) 
         world_y = origin[1] + ((height - pixel_r) * resolution) + safe_coords[1] # Using height-pixel_r
         
@@ -128,11 +134,9 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         cv2.putText(debug_img_bgr, "CV Origin", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
         # C. Draw ROS World Origin & Axes
-    
         ros_origin_px_x = int((0.0 - origin[0]) / resolution)
         ros_origin_px_y = int(height - ((0.0 - origin[1] - safe_coords[1]) / resolution))
 
-        
         cv2.drawMarker(debug_img_bgr, (ros_origin_px_x, ros_origin_px_y), 
                     (255, 0, 0), cv2.MARKER_CROSS, 20, 1)
         
@@ -156,18 +160,16 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         
         # D. Mark Selected Spawn Point (Yellow)
-        
         cv2.drawMarker(debug_img_bgr, (pixel_c, pixel_r), 
                     (0, 0, 0), cv2.MARKER_STAR, 20, 1)
+        
         cv2.putText(debug_img_bgr, "Spawn", 
                     (pixel_c + 10, pixel_r - 10), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
                 
-    
         # Save Debug Image
         debug_image_path = os.path.join(temp_dir_path, 'debug_map_with_frames.png')
         cv2.imwrite(debug_image_path, debug_img_bgr)
-        
         
         print(f"Debug map saved to: {debug_image_path}")
         # --- DEBUG SECTION END ---

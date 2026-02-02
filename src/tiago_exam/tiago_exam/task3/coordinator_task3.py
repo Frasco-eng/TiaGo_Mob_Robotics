@@ -393,6 +393,19 @@ class CoordinatorTask3(Node):
             case State.INIT:
                 self.get_logger().info("--- State: INIT ---")
 
+                # 1. Check if all required services are available
+                if not self.nav_client.service_is_ready() or \
+                   not self.head_client.service_is_ready() or \
+                   not self.manip_client.service_is_ready() or \
+                   not self.aruco_param_client.service_is_ready():
+                    
+                    self.get_logger().info("Waiting for services to be available...", throttle_duration_sec=2.0)
+                    return # Exit callback and try again in 0.1s
+
+                self.get_logger().info("--- State: INIT ---")
+                self.get_logger().info("All services are ready.")
+                
+                
                 # Save the home pose
                 self.home_pose = PoseStamped()
                 self.home_pose.header.frame_id = 'map'

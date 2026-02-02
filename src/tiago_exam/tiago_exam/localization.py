@@ -27,7 +27,6 @@ TWO_PI = 2 * np.pi          # Full rotation in radians
 class GlobalLocalizationNode(Node):
     def __init__(self):
         super().__init__('global_localization_node')
-        self.get_logger().info('Global Localization node started.')
 
         ##################################
         # QoS Profile Setup
@@ -59,14 +58,13 @@ class GlobalLocalizationNode(Node):
         ##################################
         # Thresholds and Flags
         ##################################
-        self.pos_threshold = 0.03       # Variance X e Y (square meters)
-        self.yaw_threshold = 0.03       # Variance Yaw (square radians)
-        self.max_attempt_before_reset = 7     # Max attempts before resetting particles
-
+        self.pos_threshold = 0.03               # Variance X e Y (square meters)
+        self.yaw_threshold = 0.03               # Variance Yaw (square radians)
+        self.max_attempt_before_reset = 7       # Max attempts before resetting particles
         
-        self.amcl_pose_received = False     # Flag to check if we received AMCL pose
-        self.current_covariance = []        # Store the latest covariance
-        self.tuck_complete_flag = False   # Flag to check if arm tuck is complete
+        self.amcl_pose_received = False         # Flag to check if we received AMCL pose
+        self.current_covariance = []            # Store the latest covariance
+        self.tuck_complete_flag = False         # Flag to check if arm tuck is complete
 
         ##################################
         # Initialization Wait
@@ -76,6 +74,7 @@ class GlobalLocalizationNode(Node):
             self.get_logger().info('Service not available, waiting again...')
         self.get_logger().info('AMCL service available.')
 
+        self.get_logger().info('Global Localization node started.')
 
     ##################################
     # Callbacks
@@ -107,6 +106,7 @@ class GlobalLocalizationNode(Node):
             The message indicating if the arm tuck is complete.
         """
         self.tuck_complete_flag = msg.data
+        
         if self.tuck_complete_flag:
             self.get_logger().info('Arm tuck complete signal received.')
 
@@ -218,7 +218,7 @@ class GlobalLocalizationNode(Node):
             self.get_logger().warn('No AMCL pose received yet.')
             return False
         
-        # Estrai varianze specifiche
+        # Extract variances from covariance matrix
         var_x = self.current_covariance[0]
         var_y = self.current_covariance[7]
         var_yaw = self.current_covariance[35]
