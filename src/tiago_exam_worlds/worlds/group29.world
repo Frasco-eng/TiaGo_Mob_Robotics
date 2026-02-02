@@ -1383,7 +1383,7 @@
 
     <include>
       <uri>model://aruco_cube_exam_id63</uri>
-      <pose>-2.9 -3.9 0.3 0 0 0</pose>
+      <pose>-2.9 -3.9 1.0 0 0 0</pose>
       <static>0</static>
     </include>
     <include>
@@ -1416,6 +1416,6 @@
       <static>0</static>
     </include>
 
-
+    <plugin name = "gazebo_link_attacher" filename = "libgazebo_link_attacher.so"/>
   </world>
 </sdf>

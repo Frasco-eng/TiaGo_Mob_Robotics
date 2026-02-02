@@ -154,7 +154,7 @@
       </inertial>
   </link>
 
-  <gazebo>
+  <!-- <gazebo>
     <plugin name="gazebo_grasp_fix" filename="libgazebo_grasp_fix.so">
       <arm>
         <arm_name>tiago_arm</arm_name>
@@ -170,7 +170,7 @@
       <disable_collisions_on_attach>false</disable_collisions_on_attach>
       <contact_topic>physics/contacts</contact_topic>
     </plugin>
-  </gazebo>
+  </gazebo> -->
 
 </robot>
 

@@ -16,6 +16,7 @@ from tf2_geometry_msgs import do_transform_pose
 from rclpy.executors import MultiThreadedExecutor
 import PyKDL as kdl
 
+from functools import partial
 # Custom Services
 from exam_interfaces.srv import StartNavigation, MoveHead, ManipulatorCommand
 
@@ -137,6 +138,10 @@ class CoordinatorTask3(Node):
         self.latest_camera_T_marker: Optional[kdl.Frame] = None
         self.latest_aruco_frame: Optional[TransformStamped] = None
 
+        self.base_T_marker: Optional[kdl.Frame] = None
+
+        self.home_pose = None
+
         ##################################
         # Cubes Variables
         ##################################
@@ -175,12 +180,23 @@ class CoordinatorTask3(Node):
         self.nav_client = self.create_client(StartNavigation, 'start_nav_srv', callback_group=self.callback_group)
         self.head_client = self.create_client(MoveHead, 'move_head_srv', callback_group=self.callback_group)
         self.manip_client = self.create_client(ManipulatorCommand, 'manipulator_command_srv', callback_group=self.callback_group)
-        self.aruco_param_client = self.create_client(SetParameters, '/aruco_detector/set_parameters', callback_group=self.callback_group)
+        
 
         ##################################
         # Subscriber
         ##################################
-        self.create_subscription(TransformStamped, '/aruco_detector/transform', self.aruco_callback, 10, callback_group=self.callback_group)
+        self.sub_63 = self.create_subscription(
+            TransformStamped,
+            '/aruco_detector63/transform',
+            partial(self.aruco_callback, marker_id=63),
+            10
+        )
+        self.sub_582 = self.create_subscription(
+            TransformStamped,
+            '/aruco_detector582/transform',
+            partial(self.aruco_callback, marker_id=582),
+            10
+        )
         
         ##################################
         # Publisher
@@ -193,9 +209,13 @@ class CoordinatorTask3(Node):
     # Callbacks
     ##################################
 
-    def aruco_callback(self, msg: TransformStamped):
-        self.latest_aruco_frame = msg
+    def aruco_callback(self, msg: TransformStamped, marker_id: int):
         
+        # Check if the detected marker matches the one we are currently looking for
+        if self.cubes_id[self.current_cube_idx] == marker_id:
+            self.latest_aruco_frame = msg # Save the PoseStamped
+            self.get_logger().info(f"Received ArUco marker {marker_id} pose, TransformStamped {msg}")
+            
             
     def nav_response_callback(self, future):
         try:
@@ -280,43 +300,14 @@ class CoordinatorTask3(Node):
         manip_future.add_done_callback(self.move_manip_response_callback)
         
 
-    def set_aruco_id(self, new_id):
-        """Change the ArUco marker ID parameter in the aruco_detector node."""
-        req = SetParameters.Request()
-        param = Parameter()
-        param.name = "marker_id"
-        param.value.type = ParameterType.PARAMETER_INTEGER
-        param.value.integer_value = new_id
-        req.parameters = [param]
-        
-        self.future = self.aruco_param_client.call_async(req)
-        self.waiting_for_service = True
-
     ##################################
     # Method
     ##################################
     def load_station_locations(self):
         """
         Load station locations from CSV file
-        
-        Returns
-        -------
-        pick_loc : tuple
-            (x, y) coordinates of pick location
-        place_loc : tuple
-            (x, y) coordinates of place location
-        height_place : float
-            z coordinate (height) of place location
         """
-
-        pick_loc = (0.0, 0.0)
-        place_loc = (0.0, 0.0)
-        height_place = 0.0
-        pick_orientation = Pose().orientation
-        pick_orientation.w = 1.0
-        place_orientation = Pose().orientation
-        place_orientation.w = 1.0
-
+        # Read CSV file
         try:
             with open(self.marker_file_path, 'r') as f:
                 reader = csv.DictReader(f)
@@ -336,28 +327,30 @@ class CoordinatorTask3(Node):
                     q.w = float(row['qw'])
 
                     if 'target_aruco_pick_marker_frame' in row['name']:
-                        pick_loc = (x, y)
-                        pick_orientation = q
+                        self.pick_loc = (x, y)
+                        self.pick_orientation = q
 
                     elif 'target_aruco_place_marker_frame' in row['name']:
-                        place_loc = (x, y)
-                        place_orientation = q
-                        height_place = z
+                        self.place_loc = (x, y)
+                        self.place_orientation = q
+                        self.height_place = z
 
-                        
-            
+            # Add safety clearance to place height
             station_marker_size = 0.25
         
             # Assuming marker size almost covering the vertical dimension of the station
-            height_place += station_marker_size / 2.0 + 0.10 # Add 10cm safety clearance
+            self.height_place += station_marker_size / 2.0 + 0.10 # Add 10cm safety clearance
             
             self.get_logger().info('Station locations loaded successfully from CSV.')
                     
         except Exception as e:
             self.get_logger().error(f'Failed to load station locations: {e}')
-            return pick_loc, place_loc, height_place, pick_orientation, place_orientation
-        
-        return pick_loc, place_loc, height_place, pick_orientation, place_orientation
+    
+    def save_home_pose(self):
+        self.home_pose = PoseStamped()
+        self.home_pose.header.stamp = self.get_clock().now().to_msg()
+        self.home_pose.header.frame_id = 'map'
+        self.home_pose.pose.orientation.w = 1.0
     
     def get_transformed_aruco_pose(self):
         if self.latest_aruco_frame is None:
@@ -383,7 +376,58 @@ class CoordinatorTask3(Node):
         except Exception as e:
             self.get_logger().warn(f"TF Transform failed: {e}")
             return None
+        
+    def publish_tf(self, pose_to_publish: PoseStamped) -> None:
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'base_link'
+        t.child_frame_id = 'target_cube_frame'
+        t.transform.translation.x = pose_to_publish.position.x
+        t.transform.translation.y = pose_to_publish.position.y
+        t.transform.translation.z = pose_to_publish.position.z
+        t.transform.rotation = pose_to_publish.orientation
+        self.tf_broadcaster.sendTransform(t)
+
+    def get_base_T_marker_frame(self):
+        try:
+            self.camera_T_marker = self.transform_stamped_to_kdl(self.latest_aruco_frame)
+        except Exception as e:
+            self.get_logger().error(f"Failed to convert base_T_camera to KDL: {e}")
+            return
     
+        try:
+            # lookup transform: base_link <- camera
+            base_T_camera_ts = self.tf_buffer.lookup_transform(self.base_link_frame_name, self.camera_frame_name, rclpy.time.Time())
+        except Exception as e:
+            self.get_logger().warning(f"Could not lookup base_link<-camera transform: {e}")
+            return
+
+        # convert base_T_camera to KDL
+        try:
+            base_T_camera = self.transform_stamped_to_kdl(base_T_camera_ts)
+        except Exception as e:
+            self.get_logger().error(f"Failed to convert base_T_camera to KDL: {e}")
+            return
+        
+        base_T_marker = base_T_camera * self.camera_T_marker
+
+        return base_T_marker
+    
+    def get_map_goal_pose(self, location: str) -> PoseStamped:
+        goal = PoseStamped()
+        goal.header.frame_id = 'map'
+
+        if location == 'pick':
+            goal.pose.position.x = self.pick_loc[0]
+            goal.pose.position.y = self.pick_loc[1]
+            goal.pose.orientation = self.pick_orientation
+        elif location == 'place':
+            goal.pose.position.x = self.place_loc[0]
+            goal.pose.position.y = self.place_loc[1]
+            goal.pose.orientation = self.place_orientation
+
+        return goal
+        
     ##################################
     # STATE MACHINE
     ##################################   
@@ -397,23 +441,18 @@ class CoordinatorTask3(Node):
                 # 1. Check if all required services are available
                 if not self.nav_client.service_is_ready() or \
                    not self.head_client.service_is_ready() or \
-                   not self.manip_client.service_is_ready() or \
-                   not self.aruco_param_client.service_is_ready():
+                   not self.manip_client.service_is_ready():
                     
                     self.get_logger().info("Waiting for services to be available...", throttle_duration_sec=2.0)
                     return # Exit callback and try again in 0.1s
 
-                self.get_logger().info("--- State: INIT ---")
                 self.get_logger().info("All services are ready.")
                 
-                
                 # Save the home pose
-                self.home_pose = PoseStamped()
-                self.home_pose.header.frame_id = 'map'
-                self.home_pose.pose.orientation.w = 1.0
+                self.save_home_pose()
 
                 # Load station locations from CSV
-                self.pick_loc, self.place_loc, self.height_place, self.pick_orientation, self.place_orientation = self.load_station_locations()
+                self.load_station_locations()   
 
                 self.get_logger().info(f'Pick Location: {self.pick_loc}, Place Location: {self.place_loc}, Place Height: {self.height_place}')
 
@@ -437,11 +476,7 @@ class CoordinatorTask3(Node):
                     
                     if not self.nav_in_progress and not self.nav_outcome:
                         
-                        goal = PoseStamped()
-                        goal.header.frame_id = 'map'
-                        goal.pose.position.x = self.pick_loc[0]
-                        goal.pose.position.y = self.pick_loc[1]
-                        goal.pose.orientation = self.pick_orientation
+                        goal = self.get_map_goal_pose('pick')
                         
                         self.call_send_nav_goal_srv(goal)
                         self.get_logger().info(f'Navigating to pick location for cube {cube.marker_id}')
@@ -463,70 +498,45 @@ class CoordinatorTask3(Node):
         
             case State.PICK:
                 self.get_logger().info("--- State: PICK ---")
-
-                self.get_logger().info("Positioning head for pick...")
+                
                 if not self.move_head_in_progress and not self.move_head_outcome:
+                    self.get_logger().info("Positioning head for pick...")
                     self.call_move_head_srv(pan=0.0, tilt=-0.9)
 
                 elif self.move_head_in_progress and not self.move_head_outcome:
                     self.get_logger().info("Head movement in progress...")
                     time.sleep(0.5)
                 else:
-                    time.sleep(2.0)  # Small delay to ensure stability
                     self.get_logger().info("Head positioned. Preparing for pick...")
                     # self.latest_aruco_frame = None
-                    self.detection_start_time = time.time()
-
+                    self.detection_start_time = time.time() 
                     
                     if not self.move_manip_in_progress and not self.move_manip_outcome:
                         
                         if self.latest_aruco_frame is not None:
-                            pose_base = self.get_transformed_aruco_pose()
+                            grasp_pose = self.get_transformed_aruco_pose()
 
-                            if pose_base:
-                                self.target_cube_pose = pose_base # PoseStamped
-                                self.get_logger().info(f"Cube found at (base_link): {pose_base.position}")
+                            self.cubes_to_pick[self.current_cube_idx].grasp_pose = grasp_pose
+
+                            if grasp_pose:
+                                self.target_cube_pose = grasp_pose # PoseStamped
+                                self.get_logger().info(f"Cube found at (base_link): {grasp_pose.position}")
                                 
                                 # Publish TF 
-                                t = TransformStamped()
-                                t.header.stamp = self.get_clock().now().to_msg()
-                                t.header.frame_id = 'base_link'
-                                t.child_frame_id = 'target_cube_frame'
-                                t.transform.translation.x = pose_base.position.x
-                                t.transform.translation.y = pose_base.position.y
-                                t.transform.translation.z = pose_base.position.z
-                                t.transform.rotation = pose_base.orientation
-                                self.tf_broadcaster.sendTransform(t)
+                                self.publish_tf(grasp_pose)
                                 
                                 self.get_logger().info("Sending pick command to manipulator...")
 
-                                try:
-                                    self.camera_T_marker = self.transform_stamped_to_kdl(self.latest_aruco_frame)
-                                except Exception as e:
-                                    self.get_logger().error(f"Failed to convert base_T_camera to KDL: {e}")
-                                    return
-                            
-                                try:
-                                    # lookup transform: base_link <- camera
-                                    base_T_camera_ts = self.tf_buffer.lookup_transform(self.base_link_frame_name, self.camera_frame_name, rclpy.time.Time())
-                                except Exception as e:
-                                    self.get_logger().warning(f"Could not lookup base_link<-camera transform: {e}")
-                                    return
+                                # Get base_T_marker frame
+                                self.base_T_marker = self.get_base_T_marker_frame()
 
-                                # convert base_T_camera to KDL
-                                try:
-                                    base_T_camera = self.transform_stamped_to_kdl(base_T_camera_ts)
-                                except Exception as e:
-                                    self.get_logger().error(f"Failed to convert base_T_camera to KDL: {e}")
-                                    return
-                                
-                                base_T_marker = base_T_camera * self.camera_T_marker
+                                type_cmd = 'PICK_' + str(self.cubes_to_pick[self.current_cube_idx].marker_id)
 
-                                self.call_send_manip_goal_srv(type_cmd='PICK', frame=base_T_marker)
+                                self.call_send_manip_goal_srv(type_cmd=type_cmd, frame=self.base_T_marker)
                                 self.latest_aruco_frame = None
                             else:
                                 self.get_logger().warn("TF Transform Failed, retrying...")
-                                
+                                time.sleep(0.5)
                         else:
                             # Timeout: se non trova nulla dopo 5 secondi
                             if time.time() - self.detection_start_time > 5.0:
@@ -543,6 +553,8 @@ class CoordinatorTask3(Node):
                         
                         self.move_head_outcome = False
                         self.move_head_in_progress = False
+                        
+                        self.latest_aruco_frame = None
                     
                         self.move_manip_in_progress = False
                         self.move_manip_outcome = False
@@ -566,11 +578,7 @@ class CoordinatorTask3(Node):
                         
                         if not self.nav_in_progress and not self.nav_outcome:
                             
-                            goal = PoseStamped()
-                            goal.header.frame_id = 'map'
-                            goal.pose.position.x = self.place_loc[0]
-                            goal.pose.position.y = self.place_loc[1]
-                            goal.pose.orientation = self.place_orientation
+                            goal = self.get_map_goal_pose('place')
                             
                             self.call_send_nav_goal_srv(goal)
                             self.get_logger().info(f'Navigating to place location for cube {cube.marker_id}')
@@ -605,56 +613,44 @@ class CoordinatorTask3(Node):
                     time.sleep(0.5)
                 else:
                     
-                    
                     self.get_logger().info("Head positioned. Preparing for place...")
+                    
+                    if not self.move_manip_in_progress and not self.move_manip_outcome:
+                        realease_pose = self.cubes_to_pick[self.current_cube_idx].grasp_pose
+                        self.cubes_to_pick[self.current_cube_idx].release_pose = realease_pose
+                        realease_pose.position.z = self.height_place # Update z for place with safety offset                   
 
-                    # place_pose = Pose()
-                    # place_pose.position.x = self.place_loc[0]
-                    # place_pose.position.y = self.place_loc[1]
-                    # place_pose.position.z = self.height_place
-
-                    # orientation_down = [0.5, 0.5, 0.5, 0.5] 
-                    
-                    # place_pose.orientation.x = orientation_down[0]
-                    # place_pose.orientation.y = orientation_down[1]
-                    # place_pose.orientation.z = orientation_down[2]
-                    # place_pose.orientation.w = orientation_down[3]
-
-                    
-                    
-                    
-                    self.get_logger().info("Preparing for place pose...")
-
-                    # (Opzionale) Pubblica TF per debug visivo su RViz
-                    # t = TransformStamped()
-                    # t.header.stamp = self.get_clock().now().to_msg()
-                    # t.header.frame_id = 'base_link'
-                    # t.child_frame_id = 'place_target_frame'
-                    # t.transform.translation.x = place_pose.position.x
-                    # t.transform.translation.y = place_pose.position.y
-                    # t.transform.translation.z = place_pose.position.z
-                    # t.transform.rotation = place_pose.orientation
-                    
-                    # self.tf_broadcaster.sendTransform(t)
-                    # self.get_logger().info(f"Published 'place_target_frame' TF at Z={self.height_place}")
-                    
-                    # # Salviamo la posa per il prossimo step
-                    # self.target_place_pose = place_pose
-                    
+                        # Publish TF
+                        self.publish_tf(realease_pose)
                         
-                        
+                        # Write the place command
+                        type_cmd = 'PLACE_' + str(self.cubes_to_pick[self.current_cube_idx].marker_id)
 
-                    # 1: Invia comando PLACE al Manipulator (Service)
+                        self.get_logger().info("Sending PLACE command...")
+
+                        # Send place command
+                        self.call_send_manip_goal_srv(type_cmd=type_cmd, frame=self.base_T_marker)
+                   
+                    elif self.move_manip_in_progress and not self.move_manip_outcome:
+                        self.get_logger().info("Manipulator command in progress...")
+                        time.sleep(0.5)
+                        
+                    else:
+                        self.get_logger().info("Place operation completed.")
+                        
+                        self.move_head_outcome = False
+                        self.move_head_in_progress = False
+
+                        self.latest_aruco_frame = None
                     
-                    self.get_logger().info("Sending PLACE command...")
-                    #self.send_manip_cmd("PLACE", self.target_place_pose)
-                    self.current_state = State.NEXT_CUBE
-                    self.move_head_in_progress = False
-                    self.move_head_outcome = False
-                                        
+                        self.move_manip_in_progress = False
+                        self.move_manip_outcome = False
+                    
+                        self.current_state = State.NEXT_CUBE     
+                        
+                
             case State.NEXT_CUBE:
                 self.get_logger().info("--- State: NEXT_CUBE ---")
-
 
                 if not self.move_head_in_progress and not self.move_head_outcome:
                     self.call_move_head_srv(pan=0.0, tilt=0.0)
@@ -672,15 +668,12 @@ class CoordinatorTask3(Node):
                     if self.current_cube_idx < len(self.cubes_to_pick):
                         next_id = self.cubes_to_pick[self.current_cube_idx].marker_id
                         self.get_logger().info(f'Switching to next cube ID: {next_id}')
-
-                        # Change aruco param
-                        self.set_aruco_id(next_id)
+                        
                         self.current_state = State.NAVIGATE_PICK
                         self.get_logger().info('Moving to next cube')
                     else:
                         self.current_state = State.HOME
-
-        
+                        
             case State.HOME:
                 self.get_logger().info("--- State: HOME ---")
  
@@ -760,8 +753,11 @@ class CoordinatorTask3(Node):
         p.pose.orientation.z = qz
         p.pose.orientation.w = qw
         return p
-    
 
+
+#################################
+# Main Function
+##################################
 def main(args=None):
     rclpy.init(args=args)
     coordinator = CoordinatorTask3()
@@ -777,5 +773,8 @@ def main(args=None):
         coordinator.destroy_node()
         rclpy.shutdown()
 
+#################################
+# Entry Point
+##################################
 if __name__ == '__main__':
     main()

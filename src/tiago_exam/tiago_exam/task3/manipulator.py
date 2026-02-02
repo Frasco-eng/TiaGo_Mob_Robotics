@@ -11,6 +11,7 @@ from geometry_msgs.msg import Pose
 from pymoveit2 import MoveIt2
 from pymoveit2 import GripperInterface
 from geometry_msgs.msg import PoseStamped, WrenchStamped
+from linkattacher_msgs.srv import AttachLink, DetachLink
 
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
@@ -34,14 +35,16 @@ class State(Enum):
     MOVE_TO_PRE_GRASP = 1       # Moving arm to pre-grasp position
     MOVE_TO_GRASP = 2           # Moving arm to grasp position
     GRASP = 3                   # Performing grasp
-    POST_GRASP = 4              # Arm to post-grasp position
-    MOVE_TO_SAFE = 5            # Moving arm to safe position after grasp
-    WAITING_FOR_PLACE = 6       # Waiting for PLACE command
-    MOVE_TO_PRE_PLACE = 7       # Moving arm to pre-place position
-    MOVE_TO_PLACE = 8           # Moving arm to place position
-    POST_PLACE = 9              # Arm to post-place position
-    RELEASE = 10                # Releasing the object
-    MOVE_TO_HOME = 11           # Moving arm to home position
+    ATTACH = 4                  # Attaching object to gripper
+    POST_GRASP = 5              # Arm to post-grasp position
+    MOVE_TO_SAFE = 6            # Moving arm to safe position after grasp
+    WAITING_FOR_PLACE = 7       # Waiting for PLACE command
+    MOVE_TO_PRE_PLACE = 8       # Moving arm to pre-place position
+    MOVE_TO_PLACE = 9           # Moving arm to place position
+    POST_PLACE = 10              # Arm to post-place position
+    RELEASE = 11                # Releasing the object
+    DETACH = 12                 # Detaching object from gripper
+    MOVE_TO_HOME = 13           # Moving arm to home position
 
 ##################################
 # Joint Names
@@ -67,7 +70,7 @@ JOINT_GRIPPER_NAMES = [
 # Gripper Constants
 ##################################
 OPEN_GRIPPER_JOINT_POSITIONS = [0.044, 0.044]
-CLOSED_GRIPPER_JOINT_POSITIONS = [0.025, 0.025]
+CLOSED_GRIPPER_JOINT_POSITIONS = [0.034, 0.034]
 GRIPPER_GROUP_NAME = "gripper"
 GRIPPER_COMMAND_ACTION_NAME = "gripper_controller/joint_trajectory"
 
@@ -105,12 +108,12 @@ class Manipulator(Node):
         self.arm.planner_id = "RRTConnectkConfigDefault"
 
         # Add collision objects
-        self.arm.add_collision_box(id='env_exam_pick_surface',
+        self.arm.add_collision_box(id="10",
                                         position=[-3.0, -4.0, 0.15],
                                         quat_xyzw=[0.0, 0.0, -0.7071, 0.7071],
                                         size=[0.5, 0.5, 0.3])
         
-        self.arm.add_collision_box(id='env_exam_place_surface',
+        self.arm.add_collision_box(id="11",
                                         position=[0.0, -7, 0.15],
                                         quat_xyzw=[0.0, 0.0, -0.7071434, 0.7070701],
                                         size=[0.5, 0.5, 0.3])    
@@ -147,11 +150,12 @@ class Manipulator(Node):
         ##################################
         self.current_state = State.IDLE     # State Machine Current State
         self.target_pose = None             # Target Pose for current command
-        self.current_command_type = None    # "PICK" or "PLACE"
         self.task_finished_event = Event()  # To sync with service
         self.task_success = False           # To indicate task success
         self.base_T_marker = kdl.Frame()    # Transformation from base to marker frame
-        
+        self.marker_id = None               # ID of the marker to manipulate
+        self.attach_future = None            # Future for attach service
+        self.detach_future = None            # Future for detach service
         ##################################
         # Service Server
         ##################################
@@ -161,13 +165,17 @@ class Manipulator(Node):
             self.handle_manipulator_command, 
             callback_group=self.callback_group_service
         )
+
+        ##################################
+        # Services Clients
+        ##################################
+        self.attach_client = self.create_client(AttachLink, 'ATTACHLINK')
+        self.detach_client = self.create_client(DetachLink, 'DETACHLINK')
         
         ##################################
         # Subscibers
         ##################################
         qos_profile = rclpy.qos.QoSProfile(depth=10, durability=rclpy.qos.QoSDurabilityPolicy.TRANSIENT_LOCAL)
-        
-        
         self.ft_sub = self.create_subscription(WrenchStamped, '/ft_sensor_controller/wrench', self.ft_callback, qos_profile, callback_group=self.callback_group_service)
 
         self.get_logger().info(f"Manipulator Node Ready.")
@@ -178,17 +186,27 @@ class Manipulator(Node):
     def ft_callback(self, msg: WrenchStamped):
         force = msg.wrench.force
         self.current_force = np.sqrt(force.x**2 + force.y**2)
-        self.get_logger().info(f"Current Force: x{force.x:.2f} N, y{force.y:.2f} N, z{force.z:.2f} N | Magnitude (y,z): {self.current_force:.2f} N")
+        #self.get_logger().info(f"Current Force: x{force.x:.2f} N, y{force.y:.2f} N, z{force.z:.2f} N | Magnitude (y,z): {self.current_force:.2f} N")
 
     def handle_manipulator_command(self, request, response):
         self.get_logger().info(f"Received Manipulator Command: {request.type}")
-        self.current_command_type = request.type  # "PICK" or "PLACE"
         self.base_T_marker =  self.transform_stamped_to_kdl(request.frame)
        
         self.task_finished_event.clear()
         self.task_success = False
 
-        match request.type:
+        # Extract operation type
+        if 'PICK' in request.type:
+            operation_type = 'PICK'
+            self.marker_id = request.type.split('_')[-1]
+        elif 'PLACE' in request.type:
+            operation_type = 'PLACE'
+            self.marker_id = request.type.split('_')[-1]
+        else:
+            operation_type = 'UNKNOWN'
+            self.marker_id = None
+
+        match operation_type:
             case "PICK":
                 self.get_logger().info("Starting PICK operation.")
                 self.current_state = State.MOVE_TO_PRE_GRASP
@@ -288,20 +306,53 @@ class Manipulator(Node):
                     self.gripper.wait_until_executed()
                     time.sleep(1.0)  # Wait for gripper to close
                     
+
+                    self.current_state = State.ATTACH
+                
+                case State.ATTACH:
+                    self.get_logger().info("--- State: ATTACH ---")
                     
-                    self.current_state = State.POST_GRASP
+                    if self.attach_future is None:
+                        
+                        # wait for the attach service to be available
+                        while not self.attach_client.wait_for_service(timeout_sec=1.0):
+                            self.get_logger().info('attach_link service not available, waiting...')
+                    
+                        # Attach the object to the gripper
+                        attach_request = AttachLink.Request()
+                        
+                        attach_request.model1_name = "tiago"
+                        attach_request.link1_name = "gripper_left_finger_link"
+                        attach_request.model2_name = "aruco_cube_exam_id" + str(self.marker_id)
+                        attach_request.link2_name = "link"
+                        
+                        self.attach_future = self.attach_client.call_async(attach_request)      
+                    
+                    if self.attach_future is not None and self.attach_future.done():
+                        attach_response = self.attach_future.result()
+                        if attach_response.success:
+                            self.get_logger().info("Object successfully attached to gripper.")
+                            self.current_state = State.POST_GRASP
+                            self.attach_future = None  # Reset future for next use
+                        else:
+                            self.get_logger().error("Failed to attach object to gripper.")
+                            self.task_success = False
+                            self.current_state = State.IDLE
+                            self.attach_future = None  # Reset future for next use
+                            self.task_finished_event.set()                
                     
                 case State.POST_GRASP:
-                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.3, 0.0, 0.0))
+                    self.get_logger().info("--- State: POST_GRASP ---")
+                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.4, 0.0, 0.0))
                     base_T_approach = self.base_T_marker * approach_twist
 
-                    grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
+                    post_grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
 
-                    if self.call_move_arm_srv(grasp_pose, cartesian=True):
-                        self.get_logger().info("Reached Grasp Approach Pose")
+                    if self.call_move_arm_srv(post_grasp_pose, cartesian=True):
+                        self.get_logger().info("Reached Post-Grasp Pose")
                         self.current_state = State.MOVE_TO_SAFE
                     else:
-                        self.get_logger().error("Failed to reach Grasp Approach Pose")
+                        self.get_logger().error("Failed to reach Post-Grasp Pose")
                         self.task_success = False
                         self.current_state = State.IDLE
                         self.task_finished_event.set()
@@ -326,23 +377,31 @@ class Manipulator(Node):
                     
                     self.get_logger().info("--- State: MOVE_TO_PRE_PLACE ---")
 
-                    # Compute pre-place pose
-                    pre_place_pose = copy.deepcopy(self.target_pose) # questa dovrà essere la posizione del marker station (x,y uguali, z diversa)
-                    pre_place_pose.position.z += 0.20
-
-                    if self.move_arm_to(pre_place_pose):
+                    # Compute pre-place pose: from base_T_marker which is on the side of the table to the top of the table
+                    self.base_T_marker.M = self.base_T_marker.M * kdl.Rotation.RotY(np.pi/2)
+                    pre_place_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.4, 0.0, 0.0))
+                    base_T_pre_place = self.base_T_marker * pre_place_twist
+                    pre_place_pose = self.kdl_to_pose_msg(base_T_pre_place, self.robot_base_frame)
+                    
+                    
+                    if self.call_move_arm_srv(pre_place_pose):
                         self.current_state = State.MOVE_TO_PLACE
                     else:
                         self.get_logger().error("Failed to reach Pre-Place")
                         self.task_success = False
                         self.current_state = State.IDLE
-                        self.task_finished_event.set()
+                        self.task_finished_event.set()   
+                
 
                 case State.MOVE_TO_PLACE:
                     self.get_logger().info("--- State: MOVE_TO_PLACE ---")
 
-                    place_pose = copy.deepcopy(self.target_pose)
-                    if self.move_arm_to(place_pose):
+                    place_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.04, 0.0, 0.0))
+
+                    base_T_place = self.base_T_marker * place_twist
+                    place_pose = self.kdl_to_pose_msg(base_T_place, self.robot_base_frame)
+                    
+                    if self.call_move_arm_srv(place_pose, cartesian=True):
                         self.current_state = State.RELEASE
                     else:
                         self.get_logger().error("Failed to reach Place Pose")
@@ -357,11 +416,54 @@ class Manipulator(Node):
                     self.gripper.open()
                     self.gripper.wait_until_executed()
 
-                    self.task_success = True
-
-                    self.current_state = State.MOVE_TO_SAFE
+                    self.current_state = State.DETACH
                     
-        
+                case State.DETACH:
+                    
+                    if self.detach_future is None:
+                        self.get_logger().info("Preparing to detach object from gripper...")
+                        self.detach_future = self.detach_client.call_async(DetachLink.Request())
+
+                    
+                        # Detach the object from the gripper
+                        detach_request = DetachLink.Request()
+                        detach_request.model1_name = "tiago"
+                        detach_request.link1_name = "gripper_left_finger_link"
+                        detach_request.model2_name = "aruco_cube_exam_id" + str(self.marker_id)
+                        detach_request.link2_name = "link"
+                        self.get_logger().info("aruco_cube_exam_id_" + str(self.marker_id))
+                        self.detach_future = self.detach_client.call_async(detach_request)
+                    
+                    self.get_logger().info("--- State: DETACH ---")
+                    if self.detach_future is not None and self.detach_future.done():
+                        detach_response = self.detach_future.result()
+                        if detach_response.success:
+                            self.get_logger().info("Object successfully detached from gripper.")
+                            self.current_state = State.POST_PLACE
+                            self.detach_future = None  # Reset future for next use
+                        else:
+                            self.get_logger().error("Failed to detach object from gripper.")
+                            self.task_success = False
+                            self.current_state = State.IDLE
+                            self.task_finished_event.set()
+                            self.detach_future = None  # Reset future for next use
+                            
+                case State.POST_PLACE:
+                    self.get_logger().info("--- State: POST_PLACE ---")
+                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.4, 0.0, 0.0))
+                    base_T_approach = self.base_T_marker * approach_twist
+
+                    post_place_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
+
+                    if self.call_move_arm_srv(post_place_pose, cartesian=True):
+                        self.get_logger().info("Reached Post-Place Pose")
+                        self.current_state = State.MOVE_TO_SAFE
+                    else:
+                        self.get_logger().error("Failed to reach Post-Place Pose")
+                        self.task_success = False
+                        self.current_state = State.IDLE
+                        self.task_finished_event.set()
+                        continue
 
     def kdl_to_transform_stamped(self, frame: kdl.Frame, parent: str, child: str) -> TransformStamped:
         t = TransformStamped()
@@ -415,19 +517,6 @@ class Manipulator(Node):
         p.pose.orientation.w = qw
         return p
         
-
-
-# [ PUOI USARE QUESTO PER MUOVERTI - ARM]
-# self.moveit2.move_to_pose(position=self.position, quat_xyzw=self.orientation)
-# self.moveit2.wait_until_executed()
-# self.get_logger().info("Reached target pose!")
-
-# [ PUOI USARE QUESTO PER MUOVERTI - GRIPPER]
-# self.get_logger().info("Opening gripper")
-# self.gripper.open()
-# self.gripper.wait_until_executed()
-# self.get_logger().info("Gripper opened!")
-
 
 
 ##################################

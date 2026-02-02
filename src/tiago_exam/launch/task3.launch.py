@@ -183,21 +183,39 @@ def launch_setup(context, *args, **kwargs):
     # Aruco detector
     # NOTE: Il marker_id deve poter essere cambiato a seconda del marker da rilevare (63, 582)
     # NOTE: Questi numeri vengono comunicati dal coordinator
-    aruco_detector = Node(
+    aruco_detector63 = Node(
         package="aruco_ros",
         executable="single",
-        name="aruco_detector",
+        name="aruco_detector63",
         parameters=[{
             "image_is_rectified": True,
             "marker_size": 0.07,
-            "marker_id": 63,  # Initial marker ID (will be changed dynamically)
+            "marker_id": 63,  
             "camera_frame": "head_front_camera_rgb_optical_frame",
-            "marker_frame": "aruco_marker_frame",
+            "marker_frame": "aruco_marker_frame_63",
         }],
         remappings=[
             ("/camera_info", "/head_front_camera/rgb/camera_info"),
             ("/image", "/head_front_camera/rgb/image_raw"),
-            ("/aruco_single/pose", "/aruco_detector/pose")
+            ("/aruco_single/pose", "/aruco_detector63/pose")
+        ],
+    )
+    
+    aruco_detector582 = Node(
+        package="aruco_ros",
+        executable="single",
+        name="aruco_detector582",
+        parameters=[{
+            "image_is_rectified": True,
+            "marker_size": 0.07,
+            "marker_id": 582,  
+            "camera_frame": "head_front_camera_rgb_optical_frame",
+            "marker_frame": "aruco_marker_frame_582",
+        }],
+        remappings=[
+            ("/camera_info", "/head_front_camera/rgb/camera_info"),
+            ("/image", "/head_front_camera/rgb/image_raw"),
+            ("/aruco_single/pose", "/aruco_detector582/pose")
         ],
     )
 
@@ -247,9 +265,9 @@ def launch_setup(context, *args, **kwargs):
             on_exit=[coordinator, map_navigator, manipulator, head_motion],
         )
     )
-
+    
     return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup, localization,
-            move_group, delayed_tuck_arm, aruco_detector,
+            move_group, delayed_tuck_arm, aruco_detector63, aruco_detector582,
             event_handler_localization_pick_place]
 
 ##################################
