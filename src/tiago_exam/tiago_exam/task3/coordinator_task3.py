@@ -135,6 +135,7 @@ class CoordinatorTask3(Node):
         self.target_cube_pose = None
         
         self.latest_camera_T_marker: Optional[kdl.Frame] = None
+        self.latest_aruco_frame: Optional[TransformStamped] = None
 
         ##################################
         # Cubes Variables
@@ -471,7 +472,7 @@ class CoordinatorTask3(Node):
                     self.get_logger().info("Head movement in progress...")
                     time.sleep(0.5)
                 else:
-                    time.sleep(0.5)  # Small delay to ensure stability
+                    time.sleep(2.0)  # Small delay to ensure stability
                     self.get_logger().info("Head positioned. Preparing for pick...")
                     # self.latest_aruco_frame = None
                     self.detection_start_time = time.time()

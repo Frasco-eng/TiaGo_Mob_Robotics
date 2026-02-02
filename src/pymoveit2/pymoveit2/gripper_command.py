@@ -366,3 +366,4 @@ class GripperCommand:
         """
 
         return not self.is_open
+

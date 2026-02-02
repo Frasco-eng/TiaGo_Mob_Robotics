@@ -75,17 +75,10 @@
       </geometry>
       <material name="Black"/>
     </visual>
-    <!-- <collision>
-      <origin rpy="0 0 3.1415" xyz="0.005 0 -0.165" />
-      <geometry>
-        <box size="0.01 0.05 0.11"/>
-      </geometry>
-    </collision> -->
     <collision>
-      <origin rpy="0 0 3.1415" xyz="0.005 0 -0.12" />
-      
+      <origin rpy="0 0 3.1415" xyz="0.005 0 -0.1425" />
       <geometry>
-        <box size="0.01 0.05 0.11"/>
+        <box size="0.01 0.05 0.155"/>
       </geometry>
     </collision>
   </link>
@@ -98,14 +91,14 @@
     <parent link="${name}_link" />
     <child link="${name}_right_finger_link" />
     <axis xyz="1 0 0" />
-    <limit effort="16" lower="0.0" upper="0.045" velocity="0.05" />
+    
+    <limit effort="1000.0" lower="0.0" upper="0.045" velocity="0.5" />
+    
     <calibration rising="0.0" />
-    <dynamics damping="1.0" friction="1.0"/>
-    <safety_controller k_position="20"
-                       k_velocity="20"
-                       soft_lower_limit="${0.0 + gripper_eps}"
-                       soft_upper_limit="${0.045 - gripper_eps}" />
-  </joint>
+    
+    <dynamics damping="0.0" friction="0.0"/>
+    
+    </joint>
 
   <link name="${name}_left_finger_link">
     <inertial>
@@ -122,17 +115,10 @@
       </geometry>
       <material name="Black"/>
     </visual>
-    <!-- <collision>
-      <origin rpy="0 0 3.1415" xyz="-0.005 0 -0.165" />
-      <geometry>
-        <box size="0.01 0.05 0.11"/>
-      </geometry>
-    </collision> -->
     <collision>
-      <origin rpy="0 0 3.1415" xyz="-0.005 0 -0.12" />
-      
+      <origin rpy="0 0 3.1415" xyz="-0.005 0 -0.1425" />
       <geometry>
-        <box size="0.01 0.05 0.11"/>
+        <box size="0.01 0.05 0.155"/>
       </geometry>
     </collision>
   </link>
@@ -145,14 +131,13 @@
     <parent link="${name}_link" />
     <child link="${name}_left_finger_link" />
     <axis xyz="-1 0 0" />
-    <limit effort="16" lower="0" upper="0.045" velocity="0.05" />
+    
+    <limit effort="50.0" lower="0" upper="0.045" velocity="0.5" />
+    
     <calibration rising="0.0" />
-    <dynamics damping="1.0" friction="1.0"/>
-    <safety_controller k_position="20"
-                       k_velocity="20"
-                       soft_lower_limit="${0.0 + gripper_eps}"
-                       soft_upper_limit="${0.045 - gripper_eps}" />
-  </joint>
+    <dynamics damping="1.0" friction="0.0"/>
+    
+    </joint>
 
   <!-- Grasping frame -->
   <joint name="${name}_grasping_frame_joint" type="fixed">
@@ -174,13 +159,13 @@
   <xacro:finger_gazebo name="${name}_right_finger"/>
   
   <gazebo reference="${name}_link">
-      <gravity>0</gravity>
+      <gravity>1</gravity>
   </gazebo>
   <gazebo reference="${name}_left_finger">
-      <gravity>0</gravity>
+      <gravity>1</gravity>
   </gazebo>
   <gazebo reference="${name}_right_finger">
-      <gravity>0</gravity>
+      <gravity>1</gravity>
   </gazebo>
 
  </xacro:macro>

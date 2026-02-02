@@ -38,6 +38,8 @@ class GlobalLocalizationNode(Node):
             depth=1                                         # Depth of 1 for last message
         )
 
+        
+        
         ##################################
         # Subscribers
         ##################################

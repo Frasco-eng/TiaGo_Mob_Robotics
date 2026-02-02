@@ -105,15 +105,15 @@ class Manipulator(Node):
         self.arm.planner_id = "RRTConnectkConfigDefault"
 
         # Add collision objects
-        # self.arm.add_collision_box(id='env_exam_pick_surface',
-        #                                 position=[-3.0, -4.0, 0.15],
-        #                                 quat_xyzw=[0.0, 0.0, -0.7071, 0.7071],
-        #                                 size=[0.5, 0.5, 0.3])
+        self.arm.add_collision_box(id='env_exam_pick_surface',
+                                        position=[-3.0, -4.0, 0.15],
+                                        quat_xyzw=[0.0, 0.0, -0.7071, 0.7071],
+                                        size=[0.5, 0.5, 0.3])
         
-        # self.arm.add_collision_box(id='env_exam_place_surface',
-        #                                 position=[0.0, -7, 0.15],
-        #                                 quat_xyzw=[0.0, 0.0, -0.7071434, 0.7070701],
-        #                                 size=[0.5, 0.5, 0.3])    
+        self.arm.add_collision_box(id='env_exam_place_surface',
+                                        position=[0.0, -7, 0.15],
+                                        quat_xyzw=[0.0, 0.0, -0.7071434, 0.7070701],
+                                        size=[0.5, 0.5, 0.3])    
 
         # Gripper Interface
         self.gripper = GripperInterface(
@@ -124,6 +124,7 @@ class Manipulator(Node):
         gripper_group_name=GRIPPER_GROUP_NAME,
         callback_group=self.callback_group_gripper,
         gripper_command_action_name=GRIPPER_COMMAND_ACTION_NAME,
+        max_effort=100.0
         )
 
         ##################################
@@ -227,62 +228,7 @@ class Manipulator(Node):
         self.arm.move_to_pose(position=position, quat_xyzw=quat, cartesian=cartesian)
         success = self.arm.wait_until_executed()
         return success
-    
-    def grasp_with_force(self) -> bool:
-        """
-        Closes the gripper incrementally while monitoring the force sensor.
-        Returns True if an object was grasped (force threshold met), 
-        False if the gripper closed completely without feeling force.
-        """
-        self.get_logger().info("Starting Force Grasp...")
-        
-        # Define range and step
-        # Assuming open is 0.044 and closed is 0.032 (from your constants)
-        start_pos = OPEN_GRIPPER_JOINT_POSITIONS[0] 
-        end_pos = CLOSED_GRIPPER_JOINT_POSITIONS[0]
-        
-        # Define the step size (e.g., 1mm or 0.5mm per step)
-        step_size = 0.001 
-        
-        current_target = start_pos
-
-        # Determine direction (Closing means going from 0.044 -> 0.032)
-        # We assume both fingers move symmetrically, so we drive based on the first joint value
-        
-        grasped_object = False
-
-        while current_target > end_pos:
-            # 1. Check Force
-            #self.get_logger().info(f"force at grasp: {self.current_force:.2f} N")
-            if self.current_force >= self.force_threshold:
-                self.get_logger().info(f"Grasp detected! Force: {self.current_force:.2f} N")
-                grasped_object = True
-                break
-
-            # 2. Decrement position (close slightly)
-            current_target -= step_size
-            
-            # Clamp to ensure we don't go past closed limit
-            if current_target < end_pos:
-                current_target = end_pos
-
-            # 3. Send command
-            # move_to_position sends the command to both fingers
-            self.gripper.move_to_position(current_target)
-            
-            # 4. Wait briefly for motion to occur and sensor to update
-            # Adjust this sleep based on robot response time
-            time.sleep(0.3) 
-
-        if grasped_object:
-            # Optional: Command the gripper to stay exactly here (or squeeze slightly more)
-            # to ensure the object doesn't slip.
-            self.gripper.move_to_position(current_target)
-            return True
-        else:
-            self.get_logger().warn("Gripper fully closed but no object detected.")
-            return False
-    
+     
     ##################################
     # STATE MACHINE
     ##################################
@@ -321,7 +267,7 @@ class Manipulator(Node):
                 case State.MOVE_TO_GRASP:
                     self.get_logger().info("--- State: MOVE_TO_GRASP ---")
                     
-                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.03, 0.0, 0.0))
+                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.05, 0.0, 0.0))
                     base_T_approach = self.base_T_marker * approach_twist
 
                     grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
@@ -337,22 +283,16 @@ class Manipulator(Node):
                 
                 case State.GRASP:
                     self.get_logger().info("--- State: GRASP ---")
-
-                    # # Close gripper
-                    success = self.grasp_with_force()
-                    #self.gripper.wait_until_executed()
+ 
+                    self.gripper.close()
+                    self.gripper.wait_until_executed()
+                    time.sleep(1.0)  # Wait for gripper to close
                     
-                    if success:            
-                        self.current_state = State.POST_GRASP
-                    else:
-                        self.get_logger().error("Grasp failed (no object detected).")
-                        # Decide logic here: Retry? Go Home? Or proceed anyway?
-                        self.task_success = False
-                        self.current_state = State.IDLE
-                        self.task_finished_event.set()
+                    
+                    self.current_state = State.POST_GRASP
                     
                 case State.POST_GRASP:
-                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.2, 0.0, 0.0))
+                    approach_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.3, 0.0, 0.0))
                     base_T_approach = self.base_T_marker * approach_twist
 
                     grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
@@ -520,3 +460,4 @@ def main(args=None):
 ##################################
 if __name__ == '__main__':
     main()
+
