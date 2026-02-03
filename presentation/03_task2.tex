@@ -1,0 +1,91 @@
+% ==========================================
+% SECTION 3: TASK 2 - NAVIGATION
+% ==========================================
+\section{Task 2: Navigation}
+
+% --- Slide 1: System Overview ---
+\begin{frame}{Task 2: Architecture Overview}
+    The navigation system is orchestrated by a central \textbf{Coordinator Node} managing a Finite State Machine (FSM).
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Coordinator:} Handles high-level logic (Exploring $\leftrightarrow$ Tracking) using \texttt{ReentrantCallbackGroup} for concurrent service handling.
+        \item \textbf{Naive Explorer:} Generates safe random goals using map image analysis.
+        \item \textbf{ArUco Tracker:} Performs TF calculations and active head tracking.
+        \item \textbf{Navigator:} Wrapper for Nav2 and custom 360$^\circ$ rotation.
+    \end{itemize}
+\end{frame}
+
+% --- Slide 2: Initialization ---
+\begin{frame}[fragile]{Task 2: Global Localization Strategy}
+    \textbf{Problem:} Robot spawns in a random unknown location.
+    \begin{enumerate}
+        \item \textbf{Particle Spread:} Calls \texttt{/reinitialize\_global\_localization} to distribute AMCL particles.
+        \item \textbf{Convergence Loop:} Rotates the robot 360$^\circ$ ($1.0$ rad/s) to gather sensor data until covariance thresholds are met ($<0.03$).
+    \end{enumerate}
+    \begin{lstlisting}[language=Python]
+# From localization.py
+def check_covariance(self):
+    if (var_x < 0.03 and var_y < 0.03 and var_yaw < 0.03):
+        return True
+    return False
+    \end{lstlisting}
+\end{frame}
+
+% --- Slide 3: Exploration Logic ---
+\begin{frame}{Task 2: Safe Goal Generation}
+    Instead of hardcoded waypoints, we implemented a \textbf{Naive Explorer} using Computer Vision on the map image:
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Map Parsing:} Loads the YAML/PGM map file.
+        \item \textbf{Safety Margin:} Applies \texttt{cv2.distanceTransform} to create a "Safety Map".
+        \item \textbf{Pixel Selection:} Filters pixels where distance to obstacle $>$ clearance ($0.7$m).
+    \end{itemize}
+    \begin{center}
+        \textit{This ensures generated random goals are never inside or too close to obstacles.}
+    \end{center}
+\end{frame}
+
+% --- Slide 4: State Machine & Interrupts ---
+\begin{frame}[fragile]{Task 2: Coordinator FSM}
+    The \texttt{coordinator\_task2.py} implements a State Machine with interrupt capabilities.
+    \begin{itemize}
+        \item \textbf{Exploration:} Robot navigates to random goals.
+        \item \textbf{Interrupt:} If \texttt{aruco\_tracker} detects a new ID, the FSM switches to \textbf{TRACKING} immediately.
+    \end{itemize}
+    \begin{lstlisting}[language=Python]
+# From coordinator_task2.py
+case State.EXPLORING:
+    if self.is_new_marker_detected:
+        self.state = State.TRACKING
+        self.nav_outcome = False 
+        continue # Interrupt loop
+    \end{lstlisting}
+\end{frame}
+
+% --- Slide 5: Marker Tracking Math ---
+\begin{frame}{Task 2: Visual Servoing \& Transforms}
+    To approach the marker accurately, we compute the real pose using KDL chains:
+    \vspace{0.2cm}
+    $$ T_{map}^{marker} = T_{map}^{base} \cdot T_{base}^{camera} \cdot T_{camera}^{marker} $$
+    \vspace{0.2cm}
+    \textbf{Active Head Tracking:}
+    The head automatically centers the marker during approach by calculating angular deltas:
+    \begin{itemize}
+        \item $\Delta_{pan} = \arctan(x_{raw} / z_{raw})$
+        \item $\Delta_{tilt} = \arctan(y_{raw} / d_{ground})$
+    \end{itemize}
+\end{frame}
+
+% --- Slide 6: Result Persistence ---
+\begin{frame}[fragile]{Task 2: Data Persistence}
+    Upon successful inspection, marker locations are saved for Task 3.
+    \begin{itemize}
+        \item \textbf{Storage:} CSV file with Timestamp, ID, Position, and Orientation.
+        \item \textbf{Visualization:} Broadcasts a \texttt{StaticTransform} so markers appear permanently in RViz.
+    \end{itemize}
+    \begin{lstlisting}[language=Python]
+# From aruco_noter.py
+writer.writerow([timestamp, name, x, y, z, qx, qy, qz, qw])
+self.tf_static_broadcaster.sendTransform(t)
+    \end{lstlisting}
+\end{frame}

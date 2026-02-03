@@ -13,7 +13,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
 # Custom Service
-from exam_interfaces.srv import MoveHead
+from tiago_exam_interfaces.srv import MoveHead
 
 # Python Libraries
 import time

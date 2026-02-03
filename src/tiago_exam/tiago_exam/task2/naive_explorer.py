@@ -11,8 +11,8 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from geometry_msgs.msg import PoseStamped
 
 # Custom Services
-from exam_interfaces.srv import InitGoals
-from exam_interfaces.srv import GetNextGoal
+from tiago_exam_interfaces.srv import InitGoals
+from tiago_exam_interfaces.srv import GetNextGoal
 
 from tiago_exam import utils
 
@@ -218,18 +218,18 @@ class NaiveExplorer(Node):
             # Create a 3-channel BGR image for colorful markers
             debug_img_bgr = cv2.cvtColor(binary_map, cv2.COLOR_GRAY2BGR)
 
-            # A. Highlight Safe Zone (Light Green)
+            # Highlight Safe Zone (Light Green)
             for r, c in whitelist_pixels:
                 debug_img_bgr[r, c] = [200, 255, 200] 
 
-            # B. Draw OpenCV Origin & Axes (Top-Left)
+            # Draw OpenCV Origin & Axes (Top-Left)
             # CV Origin is (0,0). X is Col (Right), Y is Row (Down)
             cv2.circle(debug_img_bgr, (5, 5), 5, (0, 0, 255), -1) 
             cv2.arrowedLine(debug_img_bgr, (5, 5), (55, 5), (0, 0, 255), 2, tipLength=0.3)  # Red X
             cv2.arrowedLine(debug_img_bgr, (5, 5), (5, 55), (0, 255, 0), 2, tipLength=0.3)  # Green Y
             cv2.putText(debug_img_bgr, "CV Origin", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-            # C. Draw ROS World Origin & Axes
+            # Draw ROS World Origin & Axes
             ros_origin_px_x = int((0.0 - origin[0]) / resolution)
             ros_origin_px_y = int(h - ((0.0 - origin[1]) / resolution))
 

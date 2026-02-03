@@ -7,22 +7,26 @@ import subprocess
 
 
 class MapSaverWatcher(Node):
+    '''
+    Node that provides a service to save the current map using nav2_map_server's map_saver_cli.
+    '''
+
     def __init__(self):
         super().__init__('map_saver_watcher')
 
         # Parameters
         self.declare_parameter('map_full_path', 'my_map')
-        self.map_path = self.get_parameter('map_full_path').get_parameter_value().string_value
+        self.map_path = self.get_parameter('map_full_path').get_parameter_value().string_value 
         
         # Create the Service
-        self.srv = self.create_service(Trigger, 'save_map', self.save_map_callback)
+        self.srv = self.create_service(Trigger, 'save_map', self.save_map_callback) # Service name is 'save_map'
     
         self.get_logger().info(f'Map saver watcher started. Will save map to: {self.map_path}')
 
     def save_map_callback(self, request, response):
         self.get_logger().info('Received request to save map.')
         
-        # Command to save the map
+        # Command to save the map which is executed as the callback is triggered
         cmd = [
             'ros2', 'run', 'nav2_map_server', 'map_saver_cli',
             '-f', self.map_path,

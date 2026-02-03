@@ -41,14 +41,12 @@ class GlobalLocalizationNode(Node):
         ##################################
         # Subscribers
         ##################################
-        self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_callback, 10)
-        self.tuck_complete_sub = self.create_subscription(Bool, '/arm_tuck_complete', self.tuck_callback, qos_profile)
-
+        self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_callback, qos_profile)
+        
         ##################################
         # Publishers
-        ##################################
+        ##################################10
         self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.loc_complete_pub = self.create_publisher(Bool, '/localization_complete', qos_profile)
         
         ##################################
         # Service Clients
@@ -64,7 +62,6 @@ class GlobalLocalizationNode(Node):
         
         self.amcl_pose_received = False         # Flag to check if we received AMCL pose
         self.current_covariance = []            # Store the latest covariance
-        self.tuck_complete_flag = False         # Flag to check if arm tuck is complete
 
         ##################################
         # Initialization Wait
@@ -95,21 +92,6 @@ class GlobalLocalizationNode(Node):
         # Update covariance
         self.current_covariance = msg.pose.covariance
 
-    def tuck_callback(self, msg: Bool) -> None:
-        """
-        Callback for arm tuck status updates.
-        Updates the tuck complete flag.
-
-        Parameters
-        ----------
-        msg : Bool
-            The message indicating if the arm tuck is complete.
-        """
-        self.tuck_complete_flag = msg.data
-        
-        if self.tuck_complete_flag:
-            self.get_logger().info('Arm tuck complete signal received.')
-
     ##################################
     # Localization Methods
     ##################################
@@ -131,13 +113,7 @@ class GlobalLocalizationNode(Node):
         # Call global localization to spread particles
         self.call_global_localization()
         
-        # Wait for arm tuck to complete
-        self.get_logger().info('Checking for arm tuck status...')
-        while rclpy.ok() and not self.tuck_complete_flag:
-            self.get_logger().info('Waiting for arm tuck to complete before localizing...')
-            rclpy.spin_once(self, timeout_sec=1.0)
-            time.sleep(1.0)
-        
+      
         # Start localization attempts
         attempt = 0  
 
@@ -160,10 +136,6 @@ class GlobalLocalizationNode(Node):
             # Check if we have converged
             if self.check_covariance(): 
                 self.get_logger().info('SUCCESS: Robot is localized!')
-                msg = Bool()
-                msg.data = True
-                self.loc_complete_pub.publish(msg)
-                time.sleep(1.0)  # Ensure message is sent
                 break
             else:
                 self.get_logger().info('Not converged yet. Rotating again...')

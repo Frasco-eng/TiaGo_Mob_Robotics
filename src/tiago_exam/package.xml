@@ -21,7 +21,7 @@
   <exec_depend>tf2</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf2_geometry_msgs</exec_depend>
-  <exec_depend>exam_interfaces</exec_depend>
+  <exec_depend>tiago_exam_interfaces</exec_depend>
   <exec_depend>pymoveit2</exec_depend>
   <exec_depend>moveit_msgs</exec_depend>
   <exec_depend>linkattacher_msgs</exec_depend>

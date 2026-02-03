@@ -1,0 +1,64 @@
+% ==========================================
+% SECTION 2: TASK 1 - MAPPING
+% ==========================================
+\section{Task 1: Map Generation}
+
+\begin{frame}{Task 1: Strategy \& Architecture}
+    \textbf{Goal:} autonomously explore and map the environment.
+    \vspace{0.5cm}
+    \begin{itemize}
+        \item \textbf{Mapping Algorithm:} SLAM via \texttt{tiago\_nav\_bringup} (\texttt{slam:=True}).
+        \item \textbf{Autonomous Exploration:} 
+            \begin{itemize}
+                \item Utilized \texttt{explore\_lite} package to drive the robot to unknown areas automatically.
+            \end{itemize}
+        \item \textbf{Safety Mechanism:} 
+            \begin{itemize}
+                \item Implemented \texttt{tuck\_arm} node to ensure the arm is safely folded before navigation starts.
+            \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Task 1: Safety Configuration (Tuck Arm)}
+    \begin{itemize}
+        \item \textbf{Purpose:} Prevent arm collisions during exploration.
+        \item \textbf{Implementation:} Custom ROS2 node sending goals to MoveIt.
+        \item \textbf{Code Snippet:}
+    \end{itemize}
+    \begin{lstlisting}[language=Python]
+# From tuck_arm.py
+self.home_joints = [0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00]
+
+# Sending Goal to MoveIt
+goal_msg = MoveGroup.Goal()
+goal_msg.request.group_name = 'arm'
+goal_msg.request.goal_constraints.append(constraints)
+self._action_client.send_goal_async(goal_msg)
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Task 1: Map Saving Utility}
+    \begin{itemize}
+        \item \textbf{Innovation:} Instead of manually running CLI commands, we created a service-based watcher node.
+        \item \textbf{Functionality:} Exposes a \texttt{save\_map} service that triggers the \texttt{map\_saver\_cli} internally.
+    \end{itemize}
+    \begin{lstlisting}[language=Python]
+# From map_saver_watcher.py
+def save_map_callback(self, request, response):
+    cmd = [
+        'ros2', 'run', 'nav2_map_server', 'map_saver_cli',
+        '-f', self.map_path, '--fmt', 'pgm'
+    ]
+    subprocess.run(cmd, check=True)
+    response.success = True
+    return response
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{Task 1: Resulting Map}
+    \begin{center}
+        % PLACEHOLDER: Remember to replace this with your actual PGM image!
+        \fbox{\begin{minipage}{8cm}\centering \vspace{2cm} \textbf{[Insert Generated PGM Map Image Here]} \vspace{2cm} \end{minipage}}
+    \end{center}
+    \footnotesize{Map generated autonomously using \texttt{explore\_lite} and saved via \texttt{map\_saver\_watcher}.}
+\end{frame}

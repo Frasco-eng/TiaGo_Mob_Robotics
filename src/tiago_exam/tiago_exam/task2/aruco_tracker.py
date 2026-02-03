@@ -16,7 +16,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
 # Custom service
-from exam_interfaces.msg import HeadPose
+from tiago_exam_interfaces.msg import HeadPose
 
 # Python Standard Libraries
 import math

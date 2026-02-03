@@ -10,8 +10,8 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from geometry_msgs.msg import PoseStamped
 
 # Custom Services and Messages
-from exam_interfaces.srv import StartNavigation, MoveHead, InitGoals, GetNextGoal, SaveMarker
-from exam_interfaces.msg import HeadPose
+from tiago_exam_interfaces.srv import StartNavigation, MoveHead, InitGoals, GetNextGoal, SaveMarker
+from tiago_exam_interfaces.msg import HeadPose
 
 from std_srvs.srv import Trigger
 
@@ -75,6 +75,7 @@ class CoordinatorTask2(Node):
         ##################################
         self.pan = 0.0
         self.tilt = 0.0
+        self.move_head_in_progress = False      # Flag to indicate if head movement is in progress
 
         ##################################
         # Navigation Variables
@@ -83,14 +84,17 @@ class CoordinatorTask2(Node):
         self.clearance = 0.7                    # Clearance around obstacles for exploration
         self.nav_in_progress = False            # Flag to indicate if navigation is in progress
         self.nav_outcome = False                # Outcome of the last navigation attempt
+
         self.rotate_in_progress = False         # Flag to indicate if rotation is in progress
         self.rotate_outcome = False             # Outcome of the last rotation attempt
-        
+
+        ##################################
+        # Coordinator Variables
+        ##################################
         self.home_pose = PoseStamped()          # Home pose to return to
-        self.home_pose.header.frame_id = 'map'  
-        self.home_pose.pose.orientation.w = 1.0
+        self.home_pose.header.frame_id = 'map'  # Frame ID for home pose
+        self.home_pose.pose.orientation.w = 1.0 # Neutral orientation
         
-        self.timer = self.create_timer(1.0, self.timer_callback, callback_group=self.callback_group)
 
         ##################################
         # Marker Tracking Variables
@@ -104,7 +108,7 @@ class CoordinatorTask2(Node):
         ##################################
         # Service Clients
         ##################################
-        self.nav_client = self.create_client(StartNavigation, 'start_nav_srv', callback_group=self.callback_group)
+        self.nav_client = self.create_client(StartNavigation, 'start_nav_srv', callback_group=self.callback_group)          
         self.head_client = self.create_client(MoveHead, 'move_head_srv', callback_group=self.callback_group)
         self.init_goals_client = self.create_client(InitGoals, 'init_goals', callback_group=self.callback_group)
         self.get_next_goal_client = self.create_client(GetNextGoal, 'get_next_goal', callback_group=self.callback_group)
@@ -117,6 +121,12 @@ class CoordinatorTask2(Node):
         self.create_subscription(PoseStamped, 'move_to_marker', self.marker_approach_callback, 10, callback_group=self.callback_group)
         self.create_subscription(PoseStamped, 'detected_marker_real_pose', self.real_marker_callback, 10, callback_group=self.callback_group)
         self.create_subscription(HeadPose, 'head_pose', self.head_pose_callback, 10, callback_group=self.callback_group)
+
+        ##################################
+        # Debug Timer (avoid info log spam)
+        ##################################
+        self.debug_period = 1.0   
+        self.timer = self.create_timer(self.debug_period, self.timer_callback, callback_group=self.callback_group)
     
     ##################################
     # Subscription Callbacks
@@ -146,7 +156,7 @@ class CoordinatorTask2(Node):
         self.target_marker_pose.pose.position.z = 0.0
 
         # Set new marker detected flag
-        if self.state == State.EXPLORING:
+        if self.state == State.EXPLORING or self.state == State.ROTATING:
             # Raise flag for the first time only to avoid multiple interrupts in the same exploration goal
             if not self.is_new_marker_detected:
                 self.is_new_marker_detected = True
@@ -193,7 +203,8 @@ class CoordinatorTask2(Node):
             if self.nav_outcome:
                 self.get_logger().info("Callback: Navigation Succeeded.")
             else:
-                self.get_logger().warn("Callback: Navigation Failed.")
+                if not self.nav_in_progress:
+                    self.get_logger().warn("Callback: Navigation Failed.")
         except Exception as e:
             self.get_logger().error(f"Service call failed: {e}")
             self.nav_outcome = False
@@ -232,7 +243,9 @@ class CoordinatorTask2(Node):
             if response.success:
                 self.get_logger().info("Head moved successfully.")
             else:
-                self.get_logger().warn("Failed to move head.")
+                if not self.move_head_in_progress:
+                    self.get_logger().warn("Failed to move head.")
+            self.move_head_in_progress = False
         except Exception as e:
             self.get_logger().error(f"Service call failed: {e}")
         
@@ -267,10 +280,21 @@ class CoordinatorTask2(Node):
     # Methods
     ##################################
     def call_move_head_srv(self, pan: float, tilt: float):
+        '''
+        Calls the move head service asynchronously.
+        Parameters
+        ----------
+        pan : float
+            The desired pan angle.
+        tilt : float
+            The desired tilt angle.
+        '''
         move_head_req = MoveHead.Request()
         move_head_req.pan = pan
         move_head_req.tilt = tilt
         head_future = self.head_client.call_async(move_head_req)
+        
+        self.move_head_in_progress = True
 
         head_future.add_done_callback(self.move_head_response_callback)
     
@@ -323,6 +347,11 @@ class CoordinatorTask2(Node):
         nav_future.add_done_callback(self.nav_response_callback)
 
     def call_get_next_goal_srv(self):
+        '''
+        Calls the get next goal service synchronously.
+        Returns the next goal PoseStamped and a boolean indicating if it's the last goal.
+        '''
+
         get_goal_req = GetNextGoal.Request()
         
         # Wait for service to be available
@@ -347,7 +376,7 @@ class CoordinatorTask2(Node):
     
     def call_save_marker(self, name_str, pose_obj):
         """
-        Chiama il servizio per salvare il marker.
+        Calls the save marker service.
         """
         if not self.save_marker_client.service_is_ready():
             self.get_logger().warn("SaveMarker service not ready!")
@@ -363,7 +392,7 @@ class CoordinatorTask2(Node):
         
     def call_rotate_360_srv(self):
         """
-        Calls the rotate 360 service.
+        Calls the rotate 360 service. It is used as during naive exploration.
         """
         if not self.rotate_client.service_is_ready():
             self.get_logger().warn("Rotate360 service not ready!")
@@ -418,7 +447,6 @@ class CoordinatorTask2(Node):
                         self.is_new_marker_detected = False
                         self.nav_outcome = False
                         self.nav_in_progress = False
-                        # Optional: Cancel current navigation here if your interface supports it
                         continue       
                     
                     if not self.nav_in_progress and not self.nav_outcome:
@@ -441,7 +469,7 @@ class CoordinatorTask2(Node):
                         
                     elif self.nav_in_progress and not self.nav_outcome:
                         self.get_logger().info("Exploration goal in progress...")
-                        time.sleep(0.5)
+                        time.sleep(self.debug_period)
                         continue
                     
                     else:                         
@@ -449,6 +477,8 @@ class CoordinatorTask2(Node):
                         # Reset flag for next goal
                         self.nav_outcome = False
                         self.nav_in_progress = False
+                        self.rotate_in_progress = False
+                        self.rotate_outcome = False
                         
                         self.state = State.ROTATING  # Continue exploring
                         self.rotation_steps = 0
@@ -472,7 +502,7 @@ class CoordinatorTask2(Node):
                     
                     # 2. Wait for Rotation
                     elif self.rotate_in_progress and not self.rotate_outcome:
-                        time.sleep(0.5)
+                        time.sleep(self.debug_period)
                         continue
                     
                     # 3. Rotation Finished
@@ -518,7 +548,7 @@ class CoordinatorTask2(Node):
                     
                         if self.nav_in_progress and not self.nav_outcome:
                             self.get_logger().info("Tracking goal in progress...")
-                            time.sleep(0.5)
+                            time.sleep(self.debug_period)
                             continue
                         else:
                             self.get_logger().info("Tracking goal reached successfully.")
@@ -537,7 +567,7 @@ class CoordinatorTask2(Node):
                     
                     if self.last_valid_real_pose is None:
                         self.get_logger().warn("Waiting for real pose...")
-                        time.sleep(0.5)
+                        time.sleep(self.debug_period)
                         continue # Try again next loop
 
                     time.sleep(1) # Wait a moment to stabilize
@@ -578,7 +608,7 @@ class CoordinatorTask2(Node):
                         self.call_send_nav_goal_srv(self.home_pose)
                     elif self.nav_in_progress and not self.nav_outcome:
                         self.get_logger().info("Homing goal in progress...")
-                        time.sleep(0.5)
+                        time.sleep(self.debug_period)
                         continue
                     else:
                         self.get_logger().info("Homing goal reached successfully.")
@@ -594,9 +624,7 @@ class CoordinatorTask2(Node):
                     self.get_logger().debug("--- State: DONE ---")
                     self.get_logger().info("Task 2 completed successfully")
                     
-                    rclpy.shutdown()
-                    break
-
+                    return # Exit the state machine
 
 ##################################
 # Coordinator Node

@@ -96,9 +96,14 @@ def get_resource_paths(packages_names: list[str]) -> str:
 # Launch Setup
 ##################################
 def launch_setup(context, *args, **kwargs):
-    ##############
+    '''
+    Launch setup function to configure and launch all necessary nodes and processes for task2.
+    This function sets up the Gazebo simulator, spawns the Tiago robot, initializes various
+    nodes for localization, navigation, aruco marker detection, and coordinates the overall task execution.
+    '''
+    ##########################
     # Paths and Configurations
-    ##############
+    ##########################
 
     # Declare the launch arguments
     world_name = LaunchConfiguration("world_name").perform(context)
@@ -121,9 +126,9 @@ def launch_setup(context, *args, **kwargs):
     #coordinates = [0.0, -1.3, 0.0, 0.0]  # Default coordinates if random generation fails
     coordinates = utils.map_pose_random_generator(map_path)  
 
-    ##############
+    ######################
     # Launch Descriptions
-    ##############
+    ######################
 
     # Gazebo launch (launch the gazebo simulator with the world_name argument for the world selection)
     gazebo = IncludeLaunchDescription(
@@ -159,7 +164,7 @@ def launch_setup(context, *args, **kwargs):
         }.items(),
         condition=IfCondition('True'))
 
-    # Tuck arm launch (load the tuck arm node to avoid collisions with the environment)
+    # Tuck arm node (load the tuck arm node to avoid collisions with the environment)
     tuck_arm = Node(package='tiago_exam',
                     executable='tuck_arm',
                     emulate_tty=True,
@@ -172,7 +177,7 @@ def launch_setup(context, *args, **kwargs):
         actions=[tuck_arm]
     )
 
-    # Localization launch (load the localization node to perform AMCL localization)
+    # Localization node (load the localization node to perform AMCL localization)
     localization = Node(
         package='tiago_exam',
         executable='localization',
@@ -181,7 +186,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
 
-    # Pick aruco_marker detector
+    # Pick aruco_marker detector 26
     aruco_pick = Node(
         package="aruco_ros",
         executable="single",
@@ -190,17 +195,17 @@ def launch_setup(context, *args, **kwargs):
             "image_is_rectified": True,
             "marker_size": 0.25,
             "marker_id": 26,
-            "camera_frame": "head_front_camera_rgb_optical_frame",
-            "marker_frame": "marker_pick_frame",
+            "camera_frame": "head_front_camera_rgb_optical_frame", # Frame of the camera
+            "marker_frame": "marker_pick_frame", # Frame of the marker
         }],
-        remappings=[
+        remappings=[ # Remap topics to avoid conflicts between both detectors
             ("/camera_info", "/head_front_camera/rgb/camera_info"),
             ("/image", "/head_front_camera/rgb/image_raw"),
             ("/aruco_single/pose", "/aruco_pick/pose")
         ],
     )
 
-    # Place aruco_marker detector
+    # Place aruco_marker detector 238
     aruco_place = Node(
         package="aruco_ros",
         executable="single",
@@ -219,6 +224,7 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
+    # Coordinator node (to coordinate the task2 execution): it is in charge of managing the state machine
     coordinator = Node(
         package='tiago_exam',
         executable='coordinator_task2',
@@ -227,6 +233,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
     
+    # Map navigator node (to navigate to given map poses)
     map_navigator = Node(
         package='tiago_exam',
         executable='map_navigator',
@@ -235,7 +242,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
 
-    # Naive explorer node (load the explorer node to generate navigation goals)
+    # Naive explorer node (load the explorer node to generate navigation goals): it uses the map_path to avoid obstacles
     naive_explorer = Node(
         package='tiago_exam',
         executable='naive_explorer',
@@ -245,7 +252,7 @@ def launch_setup(context, *args, **kwargs):
                     'map_path': map_path}]
     )
 
-    # Aruco noter node (write marker detections to CSV file)
+    # Aruco noter node (write marker detections to CSV file): used to log the detections during navigation useful for task3
     aruco_noter = Node(
         package='tiago_exam',
         executable='aruco_noter',
@@ -255,7 +262,7 @@ def launch_setup(context, *args, **kwargs):
                      'marker_file_path': marker_file_path}]
     )
 
-    # Aruco tracker node (track aruco markers and provide their last known pose)
+    # Aruco tracker node (track aruco markers and provide their last known pose): used to, once detected, keep track while navigating
     aruco_tracker = Node(
         package='tiago_exam',
         executable='aruco_tracker',
@@ -265,6 +272,7 @@ def launch_setup(context, *args, **kwargs):
                      'marker_file_path': marker_file_path}]
     )
 
+    # Head motion node (to move the head during exploration)
     move_head = Node(
         package='tiago_exam',
         executable='head_motion',
@@ -273,6 +281,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
     
+    # Start localization after tuck arm ends
     event_handler_tuck_to_localization = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=tuck_arm,
@@ -280,17 +289,16 @@ def launch_setup(context, *args, **kwargs):
         )
     )
     
-    # Event handler to start exploration after localization ends
-    event_handler_localization_exploration = RegisterEventHandler(
+    # Start task2 framework after localization ends
+    event_handler_localization_to_exploration = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=localization,
             on_exit=[naive_explorer, aruco_noter, aruco_tracker, coordinator, map_navigator, move_head],
         )
     )
     
-    
-    return [tiago_spawn, tiago_bringup, move_group, tiago_nav_bringup, delayed_tuck_arm,
-            localization, aruco_place, aruco_pick, event_handler_localization_exploration]
+    return [gazebo, tiago_spawn, tiago_bringup, move_group, tiago_nav_bringup, delayed_tuck_arm,
+            event_handler_tuck_to_localization, aruco_place, aruco_pick, event_handler_localization_to_exploration]
 
 ##################################
 # Generate Launch Description

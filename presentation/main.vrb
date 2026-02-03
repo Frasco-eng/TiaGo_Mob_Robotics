@@ -1,0 +1,13 @@
+\frametitle{Task 3: Placement \& Release}
+The placement pose is calculated dynamically relative to the detected grasp transform.
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Logic:} We reuse the grasp orientation but apply a vertical offset to ensure the cube is released \textit{on top} of the table.
+        \item \textbf{Offset:} $+15cm$ ($0.15m$) on the Z-axis.
+    \end{itemize}
+    \begin{lstlisting}[language=Python]
+# From coordinator_task3.py
+release_frame = kdl.Frame(self.base_T_marker)
+release_frame.p[2] += 0.15 # Raise Z by 15 cm
+    \end{lstlisting}
+    After placement, the \texttt{/DETACHLINK} service is called to release the object physics.

@@ -34,6 +34,7 @@ from launch.actions import OpaqueFunction
 # Python Libraries
 import os
 from os import environ, pathsep
+from tiago_exam import utils
 
 ##################################
 # Functions
@@ -88,28 +89,13 @@ def get_resource_paths(packages_names: list[str]) -> str:
 
     return resource_paths
 
-def get_package_src_directory(package_name):
-    install_path = get_package_share_directory(package_name)
-    
-    # install_path: .../workspace/install/nome_pkg/share/nome_pkg
-    workspace_path = install_path
-    for _ in range(4):
-        workspace_path = os.path.dirname(workspace_path)
-    
-    # Build the src path
-    src_path = os.path.join(workspace_path, 'src', package_name)
-    
-    # Safety check
-    if not os.path.exists(src_path):
-        print(f"[WARN] Cannot find {src_path}. Are you using a standard workspace?")
-        return None
-        
-    return src_path
-
 ##################################
 # Launch Setup
 ##################################
 def launch_setup(context, *args, **kwargs):
+    '''
+    Launch setup function to configure and launch all necessary nodes and launch files.
+    '''
     ##############
     # Paths and Configurations
     ##############
@@ -123,7 +109,7 @@ def launch_setup(context, *args, **kwargs):
         map_name = 'env_map'
 
     # Directories
-    pkg_dir = get_package_src_directory('tiago_exam')
+    pkg_dir = utils.get_package_src_directory('tiago_exam')
     
     # Map path
     map_path = os.path.join(pkg_dir, f"maps/{world_name}_{map_name}")
@@ -186,22 +172,15 @@ def launch_setup(context, *args, **kwargs):
         period=8.0,
         actions=[tuck_arm]
     )
-    
-    
-    delayed_explore_lite = TimerAction(
-        period=10.0,
-        actions=[explore_lite]
-    )
-
-    event_handler_tuck = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=tuck_arm,
-            on_exit=[explore_lite],
+        
+    event_handler_tuck_to_explore = RegisterEventHandler(  
+            event_handler=OnProcessExit(
+                target_action=tuck_arm,
+                on_exit=[explore_lite],
+            )
         )
-    )
 
-
-    # Sostituiamo il save_map_on_exit con il nostro Watcher Node
+    # Substitute the map_saver_watcher node to monitor the robot's exploration and save the map when done
     map_watcher_node = Node(
         package='tiago_exam',
         executable='map_saver_watcher',
@@ -213,15 +192,18 @@ def launch_setup(context, *args, **kwargs):
     )
     
 
-
     return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup,
-            move_group, delayed_tuck_arm, delayed_explore_lite, map_watcher_node]
+            move_group, delayed_tuck_arm, event_handler_tuck_to_explore, map_watcher_node]
 
 ##################################
 # Generate Launch Description
 ##################################
 def generate_launch_description():
-    # Set the GAZEBO_MODEL_PATH and GAZEBO_RESOURCE_PATH environment variables
+    '''
+    Generate the launch description for the Tiago exam task 1.
+    '''
+
+    # Set the GAZEBO_MODEL_PATH and GAZEBO_RESOURCE_PATH environment variables by aggregating paths from relevant packages
     packages = ['tiago_description', 'pmb2_description',
                 'pal_hey5_description', 'pal_gripper_description',
                 'pal_robotiq_description']
@@ -240,19 +222,34 @@ def generate_launch_description():
     ld = LaunchDescription()
     
     # Declare launch arguments
-    ld.add_action(DeclareLaunchArgument(
+    ld.add_action(DeclareLaunchArgument( # used to select the world to load in Gazebo without having to specify
         'world_name',
         default_value='group29',
         description='Name of the Gazebo world to load'))
     
-    ld.add_action(DeclareLaunchArgument(
+    ld.add_action(DeclareLaunchArgument( # used to select the map to load for navigation2 and saving without having to specify
         'map_name',
         default_value='env_map',
         description='Name of the map to load without extension. If empty, use default map for the world.'))
    
-    ld.add_action(SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1'))
-    ld.add_action(SetEnvironmentVariable('MESA_GL_VERSION_OVERRIDE', '3.3'))
+    ld.add_action(SetEnvironmentVariable('RCUTILS_COLORIZED_OUTPUT', '1')) # Enable colored output to see errors/warnings in different colors
+    ld.add_action(SetEnvironmentVariable('MESA_GL_VERSION_OVERRIDE', '3.3')) 
     ld.add_action(SetEnvironmentVariable('GAZEBO_MODEL_PATH', model_path))
-    ld.add_action(OpaqueFunction(function=launch_setup))
+    ld.add_action(OpaqueFunction(function=launch_setup)) # Call the launch setup function to add all nodes and launch files
+                                                         # The OpaqueFunction is used to pass the launch context to the launch_setup function
 
     return ld
+
+    #############################
+    # OVERALL STRUCTURE FOR TASK1
+    #############################
+    # 1. Launch Gazebo with the specified world
+    # 2. Spawn Tiago robot in Gazebo
+    # 3. Launch Tiago bringup (robot state publisher and controllers)
+    # 4. Launch MoveIt2 for Tiago
+    # 5. Launch Navigation2 for Tiago with SLAM enabled
+    # 6. Tuck Tiago's arm to avoid collisions
+    # 7. Start autonomous exploration using explore_lite after the arm is tucked
+    # 8. Monitor exploration and save the map when done
+
+    

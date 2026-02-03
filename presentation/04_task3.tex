@@ -1,0 +1,60 @@
+% ==========================================
+% SECTION 4: TASK 3 - MANIPULATION
+% ==========================================
+\section{Task 3: Pick and Place}
+
+% --- Slide 1: High-Level Coordination ---
+\begin{frame}{Task 3: Coordination Strategy}
+    The \texttt{coordinator\_task3} node manages the full transport cycle.
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Data Loading:} Loads exact Pick and Place locations saved in Task 2 from \texttt{marker\_locations.csv}.
+        \item \textbf{Sequence:} Enforces the mandatory order: Cube \textbf{63} followed by Cube \textbf{582}.
+        \item \textbf{Visual Feedback:} Publishes \texttt{target\_cube\_frame} to TF for real-time visualization in RViz.
+    \end{itemize}
+\end{frame}
+
+% --- Slide 2: Manipulation Logic ---
+\begin{frame}[fragile]{Task 3: MoveIt2 Integration}
+    The \texttt{manipulator} node interfaces with MoveIt2 using the \texttt{RRTConnectkConfigDefault} planner.
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Collision Avoidance:} Added virtual collision boxes (IDs 10-13) to prevent the arm from hitting the floor or robot base.
+        \item \textbf{Safety:} Implemented a "Safe Joint Configuration" to retract the arm during navigation.
+    \end{itemize}
+    \begin{lstlisting}[language=Python]
+# From manipulator.py
+self.safe_joints_position = [
+    0.0, 0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00
+]
+    \end{lstlisting}
+\end{frame}
+
+% --- Slide 3: Grasping Mechanics ---
+\begin{frame}{Task 3: Robust Grasping (Gazebo)}
+    To ensure stability in the simulation (as suggested in the guidelines), we implemented the \textbf{Link Attacher} plugin logic.
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Approach:} The arm moves to a "Pre-Grasp" pose defined by a $-0.4m$ offset along the X-axis of the marker.
+        \item \textbf{Attaching:} Once the gripper closes, we call the \texttt{/ATTACHLINK} service to rigidly bind the cube to the gripper link.
+    \end{itemize}
+    \begin{center}
+        \textit{This prevents the object from slipping during the robot's navigation phases.}
+    \end{center}
+\end{frame}
+
+% --- Slide 4: Placement Logic ---
+\begin{frame}[fragile]{Task 3: Placement \& Release}
+    The placement pose is calculated dynamically relative to the detected grasp transform.
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Logic:} We reuse the grasp orientation but apply a vertical offset to ensure the cube is released \textit{on top} of the table.
+        \item \textbf{Offset:} $+15cm$ ($0.15m$) on the Z-axis.
+    \end{itemize}
+    \begin{lstlisting}[language=Python]
+# From coordinator_task3.py
+release_frame = kdl.Frame(self.base_T_marker)
+release_frame.p[2] += 0.15 # Raise Z by 15 cm
+    \end{lstlisting}
+    After placement, the \texttt{/DETACHLINK} service is called to release the object physics.
+\end{frame}

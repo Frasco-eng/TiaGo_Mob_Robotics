@@ -6,11 +6,6 @@ from rclpy.action import ActionClient
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import Constraints, JointConstraint
 
-
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
-
-from std_msgs.msg import Bool
-
 class ArmTucker(Node):
 
     def __init__(self):
@@ -26,35 +21,33 @@ class ArmTucker(Node):
             'arm_1_joint', 'arm_2_joint', 'arm_3_joint', 
             'arm_4_joint', 'arm_5_joint', 'arm_6_joint', 'arm_7_joint'
         ]
-
-        # Configuration for the publisher
-        qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,         # Ensures message delivery
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,    # Keeps the last message for late subscribers
-            history=HistoryPolicy.KEEP_LAST,                # Keep only the last message
-            depth=1                                         # Depth of 1 for last message
-        )
-
+                                       
+    
         # Publisher to notify when tuck is complete
-        self.tuck_complete_pub = self.create_publisher(Bool, '/arm_tuck_complete', qos_profile)
-        
         self.success = False
+        self.processing_done = False
 
     def tuck_arm(self):
+        self.success = False
+        self.processing_done = False
+        
         self.get_logger().info('Waiting for MoveIt action server...')
         if not self._action_client.wait_for_server(timeout_sec=20.0):
             self.get_logger().error('MoveIt server not available!')
+            self.processing_done = True
             return False
 
         self.get_logger().info('Sending TUCK goal...')
         
-        # 1. Create the Goal Message
+        # Goal Message
         goal_msg = MoveGroup.Goal()
         goal_msg.request.group_name = 'arm'
         goal_msg.request.num_planning_attempts = 10
         goal_msg.request.allowed_planning_time = 5.0
         
-        # 2. Define Constraints (The Target Joint Values)
+        goal_msg.request.start_state.is_diff = True
+        
+        # Define Constraints
         constraints = Constraints()
         for i in range(7):
             jc = JointConstraint()
@@ -67,7 +60,7 @@ class ArmTucker(Node):
             
         goal_msg.request.goal_constraints.append(constraints)
 
-        # 3. Send the Goal
+        # Send the Goal
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)
         self._send_goal_future.add_done_callback(self.goal_response_callback)
         
@@ -75,6 +68,8 @@ class ArmTucker(Node):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().error('Goal rejected by MoveIt')
+            self.success = False
+            self.processing_done = True
             return
 
         self.get_logger().info('Goal accepted by MoveIt')
@@ -84,44 +79,47 @@ class ArmTucker(Node):
         
     def get_result_callback(self, future):
         result = future.result().result
-        tuck_msg = Bool()
+        
         # Error code 1 means SUCCESS
         if result.error_code.val == 1:
             self.get_logger().info('Arm TUCKED successfully!')
-            
-            tuck_msg.data = True
-            self.tuck_complete_pub.publish(tuck_msg)
-
             self.success = True
+            self.processing_done = True
         else:
             self.get_logger().error(f'Motion failed with error code: {result.error_code.val}')
-            tuck_msg.data = False
-            self.tuck_complete_pub.publish(tuck_msg)
             self.success = False
+        self.processing_done = True
         
             
 def main(args=None):
     rclpy.init(args=args)
     node = ArmTucker()
 
-    success = False
-    # Simple retry loop
+    final_success = False
+
     for i in range(3):
-        node.tuck_arm()
-        if node.success:
-            success = True
-            break
-            
-        node.get_logger().warn(f'Retrying... ({i+1}/3)')
-
-    if success:
-        node.get_logger().info('Tuck complete. Node staying alive to hold latch...')
+        node.get_logger().info(f'--- Attempt {i+1}/3 ---')
         
-        try:
-            rclpy.spin(node) 
-        except KeyboardInterrupt:
-            pass
+        # Trigger the async action
+        node.tuck_arm()
 
+        # Process events manually until the node reports it's done
+        while not node.processing_done and rclpy.ok():
+            rclpy.spin_once(node, timeout_sec=0.1)
+
+        # Check result
+        if node.success:
+            final_success = True
+            break
+        
+        node.get_logger().warn(f'Retrying... ({i+1}/3)')
+        
+    if final_success:
+        node.get_logger().info('Success! Holding node alive to maintain state (optional)...')
+    else:
+        node.get_logger().error('All tuck attempts failed.')
+
+    node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':

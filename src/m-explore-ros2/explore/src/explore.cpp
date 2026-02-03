@@ -354,14 +354,7 @@ void Explore::returnToInitialPose()
   goal.pose.header.frame_id = costmap_client_.getGlobalFrameID();
   goal.pose.header.stamp = this->now();
 
-  if (map_saver_client_->wait_for_service(std::chrono::seconds(2))) {
-    auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-    auto result_future = map_saver_client_->async_send_request(request);
-    // Optionally, you can wait for the result or handle it asynchronously
-    RCLCPP_INFO(logger_, "Map save service called.");
-  } else {
-    RCLCPP_WARN(logger_, "Map save service not available.");
-  }
+ 
 
   auto send_goal_options =
       rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SendGoalOptions();
@@ -373,6 +366,15 @@ void Explore::returnToInitialPose()
         if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
           
           RCLCPP_INFO(this->get_logger(), "Home arrival confirmed.");
+
+        if (map_saver_client_->wait_for_service(std::chrono::seconds(2))) {
+          auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+          auto result_future = map_saver_client_->async_send_request(request);
+          // Optionally, you can wait for the result or handle it asynchronously
+          RCLCPP_INFO(logger_, "Map save service called.");
+        } else {
+          RCLCPP_WARN(logger_, "Map save service not available.");
+        }
 
         }
       };

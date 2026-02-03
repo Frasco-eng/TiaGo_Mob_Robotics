@@ -12,7 +12,7 @@ from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 
 # Custom service
-from exam_interfaces.srv import SaveMarker
+from tiago_exam_interfaces.srv import SaveMarker
 
 # Python Libraries
 import os

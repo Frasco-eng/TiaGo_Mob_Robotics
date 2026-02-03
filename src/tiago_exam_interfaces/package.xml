@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>exam_interfaces</name>
+  <name>tiago_exam_interfaces</name>
   <version>0.0.0</version>
   <description>Interfacce custom</description>
   <maintainer email="user@todo.todo">user</maintainer>

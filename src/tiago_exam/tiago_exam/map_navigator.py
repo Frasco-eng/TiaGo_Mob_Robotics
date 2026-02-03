@@ -19,7 +19,7 @@ from geometry_msgs.msg import Twist
 from std_srvs.srv import Trigger
 
 # Custom service
-from exam_interfaces.srv import StartNavigation
+from tiago_exam_interfaces.srv import StartNavigation
 
 ANGULAR_SPEED = 1.0  # radians per second
 
@@ -27,6 +27,8 @@ ANGULAR_SPEED = 1.0  # radians per second
 # Map Navigator Service
 ##################################
 class MapNavigatorService(Node):
+    '''
+    A ROS2 Node that provides navigation services using the NavigateToPose action server.'''
     def __init__(self):
         super().__init__('map_navigator_service')
         self.cb_group = ReentrantCallbackGroup()
@@ -34,6 +36,8 @@ class MapNavigatorService(Node):
         self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         
         self.current_yaw = None
+        
+        self.max_retries = 3
         
         ##################################
         # Subscriptions
@@ -46,7 +50,6 @@ class MapNavigatorService(Node):
             10,
             callback_group=self.cb_group
         )
-        
         
         ##################################
         # Service Server
@@ -110,21 +113,35 @@ class MapNavigatorService(Node):
 
         # Set the goal pose from the request
         goal.pose = request.pose
-                
-        # Wait for goal acceptance
-        send_goal_future = self.nav_client.send_goal_async(goal)
-
-        # Wait until the goal is accepted
-        while not send_goal_future.done():
-            time.sleep(0.1) 
         
-        # Get the goal handle
-        goal_handle = send_goal_future.result()
+        goal_accepted = False
+        
+        for attempt in range(self.max_retries):
+            self.get_logger().info(f"Attempt {attempt + 1} to send goal.")
+            
+            # Send the goal and wait for result
+            send_goal_future = self.nav_client.send_goal_async(goal)
+            
+            while not send_goal_future.done():
+                time.sleep(0.1)
+                
+            goal_handle = send_goal_future.result()
+            
+            if goal_handle.accepted:
+                goal_accepted = True
+                self.get_logger().info("Goal accepted by the action server.")
+                break
+            else:
+                self.get_logger().warn("Goal rejected by the action server.")
+                time.sleep(0.5)  
 
-        if not goal_handle.accepted:
+        
+        if not goal_accepted:
+            self.get_logger().error("All attempts to send goal failed.")
             response.success = False
             return response
-
+       
+        
         # Wait for the result
         result_future = goal_handle.get_result_async()
         while not result_future.done():

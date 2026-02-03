@@ -164,7 +164,7 @@ controller_server:
       primary_controller: "dwb_core::DWBLocalPlanner"
       
       # 3. Shim-specific parameters
-      angular_dist_threshold: 0.15 # 45 degrees (Trigger rotation if error is larger than this)
+      angular_dist_threshold: 0.1 # 45 degrees (Trigger rotation if error is larger than this)
       forward_sampling_distance: 0.4 # Look 0.5m ahead on the path to find the target heading
       rotate_to_heading_angular_vel: 0.5 # How fast to rotate in place
       max_angular_accel: 2.0
@@ -200,7 +200,7 @@ controller_server:
       angular_granularity: 0.025
       transform_tolerance: 0.2
       xy_goal_tolerance: 0.05
-      yaw_goal_tolerance: 0.05      # before was 0.25
+      yaw_goal_tolerance: 0.05      
       trans_stopped_velocity: 0.01
       rot_stopped_velocity: 0.01
       short_circuit_trajectory_evaluation: True
@@ -208,7 +208,7 @@ controller_server:
 
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
 
-      BaseObstacle.scale: 2.0 # determines how "steep" the cost increase is near obstacles
+      BaseObstacle.scale: 0.5 # determines how "steep" the cost increase is near obstacles
 
       PathDist.scale: 24.0 #32.0 weights penalty to global path distance
       PathAlign.scale: 0.0 #32 how closely the robot heading stays parallel to the path

@@ -181,8 +181,6 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # Aruco detector
-    # NOTE: Il marker_id deve poter essere cambiato a seconda del marker da rilevare (63, 582)
-    # NOTE: Questi numeri vengono comunicati dal coordinator
     aruco_detector63 = Node(
         package="aruco_ros",
         executable="single",
@@ -259,6 +257,13 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
 
+    event_handler_tuck_to_localization = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=tuck_arm,
+            on_exit=[localization],
+        )
+    )
+
     event_handler_localization_pick_place = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=localization,
@@ -266,7 +271,7 @@ def launch_setup(context, *args, **kwargs):
         )
     )
     
-    return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup, localization,
+    return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup, event_handler_tuck_to_localization,
             move_group, delayed_tuck_arm, aruco_detector63, aruco_detector582,
             event_handler_localization_pick_place]
 

@@ -1,0 +1,4 @@
+\beamer@sectionintoc {1}{Introduction}{3}{0}{1}
+\beamer@sectionintoc {2}{Task 1: Map Generation}{5}{0}{2}
+\beamer@sectionintoc {3}{Task 2: Navigation}{9}{0}{3}
+\beamer@sectionintoc {4}{Task 3: Pick and Place}{15}{0}{4}

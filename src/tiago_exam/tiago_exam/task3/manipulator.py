@@ -12,11 +12,11 @@ from pymoveit2 import MoveIt2
 from pymoveit2 import GripperInterface
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from linkattacher_msgs.srv import AttachLink, DetachLink
-
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
+
 # Custom Service
-from exam_interfaces.srv import ManipulatorCommand
+from tiago_exam_interfaces.srv import ManipulatorCommand
 
 
 # Python Libraries
@@ -41,7 +41,7 @@ class State(Enum):
     WAITING_FOR_PLACE = 7       # Waiting for PLACE command
     MOVE_TO_PRE_PLACE = 8       # Moving arm to pre-place position
     MOVE_TO_PLACE = 9           # Moving arm to place position
-    POST_PLACE = 10              # Arm to post-place position
+    POST_PLACE = 10             # Arm to post-place position
     RELEASE = 11                # Releasing the object
     DETACH = 12                 # Detaching object from gripper
     MOVE_TO_HOME = 13           # Moving arm to home position
@@ -71,6 +71,7 @@ JOINT_GRIPPER_NAMES = [
 ##################################
 OPEN_GRIPPER_JOINT_POSITIONS = [0.044, 0.044]
 CLOSED_GRIPPER_JOINT_POSITIONS = [0.034, 0.034]
+FULLY_CLOSED_GRIPPER_JOINT_POSITIONS = [0.0, 0.0]
 GRIPPER_GROUP_NAME = "gripper"
 GRIPPER_COMMAND_ACTION_NAME = "gripper_controller/joint_trajectory"
 
@@ -78,6 +79,9 @@ GRIPPER_COMMAND_ACTION_NAME = "gripper_controller/joint_trajectory"
 # Manipulator Node
 ##################################
 class Manipulator(Node):
+    '''
+    Manipulator Node for Tiago Robot
+    '''
     def __init__(self):
         super().__init__('manipulator')
 
@@ -130,6 +134,17 @@ class Manipulator(Node):
         max_effort=100.0
         )
 
+        # Add collision objects
+        self.gripper.add_collision_box(id='12',
+                                            position=[-3.0, -4.0, 0.15],
+                                            quat_xyzw=[0.0, 0.0, -0.7071, 0.7071],
+                                            size=[0.5, 0.5, 0.3])
+        
+        self.gripper.add_collision_box(id='13',
+                                            position=[0.0, -7, 0.15],
+                                            quat_xyzw=[0.0, 0.0, -0.7071434, 0.7070701],
+                                            size=[0.5, 0.5, 0.3]) 
+
         ##################################
         # Velocity and Acceleration Limits
         ##################################
@@ -154,8 +169,8 @@ class Manipulator(Node):
         self.task_success = False           # To indicate task success
         self.base_T_marker = kdl.Frame()    # Transformation from base to marker frame
         self.marker_id = None               # ID of the marker to manipulate
-        self.attach_future = None            # Future for attach service
-        self.detach_future = None            # Future for detach service
+        self.attach_future = None           # Future for attach service
+        self.detach_future = None           # Future for detach service
         ##################################
         # Service Server
         ##################################
@@ -318,9 +333,11 @@ class Manipulator(Node):
                 
                 case State.GRASP:
                     self.get_logger().info("--- State: GRASP ---")
- 
+                    self.gripper.closed_gripper_joint_positions = FULLY_CLOSED_GRIPPER_JOINT_POSITIONS
+                    # Close gripper
                     self.gripper.close()
                     self.gripper.wait_until_executed()
+                    self.gripper.closed_gripper_joint_positions = CLOSED_GRIPPER_JOINT_POSITIONS
                     time.sleep(1.0)  # Wait for gripper to close
                     
 
@@ -413,7 +430,7 @@ class Manipulator(Node):
                 case State.MOVE_TO_PLACE:
                     self.get_logger().info("--- State: MOVE_TO_PLACE ---")
 
-                    place_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.04, 0.0, 0.0))
+                    place_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.1, 0.0, 0.0))
 
                     base_T_place = self.base_T_marker * place_twist
                     place_pose = self.kdl_to_pose_msg(base_T_place, self.robot_base_frame)
@@ -456,6 +473,9 @@ class Manipulator(Node):
                         detach_response = self.detach_future.result()
                         if detach_response.success:
                             self.get_logger().info("Object successfully detached from gripper.")
+                            # Open gripper
+                            self.gripper.close()
+                            self.gripper.wait_until_executed()
                             self.current_state = State.POST_PLACE
                             self.detach_future = None  # Reset future for next use
                         else:
@@ -483,6 +503,7 @@ class Manipulator(Node):
                         continue
 
     def kdl_to_transform_stamped(self, frame: kdl.Frame, parent: str, child: str) -> TransformStamped:
+        
         t = TransformStamped()
 
         # Basic information
