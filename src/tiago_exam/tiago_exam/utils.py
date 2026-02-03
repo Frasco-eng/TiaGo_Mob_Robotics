@@ -89,16 +89,10 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         safe_indices = np.where(dist_map >= effective_clearance_px)
         whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
 
-        # DEBUG: Save the distance map image
-        debug_img = np.zeros_like(img)
-        for r, c in whitelist_pixels:
-            debug_img[r, c] = 255
+        # Create temp directory for debug images
         temp_dir_path = os.path.join(get_package_src_directory('tiago_exam'), 'temp')
         if not os.path.exists(temp_dir_path):
             os.makedirs(temp_dir_path)
-        debug_image_path = os.path.join(temp_dir_path, 'debug_map.png')
-        cv2.imwrite(debug_image_path, debug_img)
-        print(f"Safe spawn pixels image saved to {debug_image_path}")
         
         # If no safe pixels found, relax clearance requirement
         if not whitelist_pixels:
@@ -167,11 +161,11 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
                     (pixel_c + 10, pixel_r - 10), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
                 
-        # Save Debug Image
-        debug_image_path = os.path.join(temp_dir_path, 'debug_map_with_frames.png')
+        # Save Debug Spawn Map Image
+        debug_image_path = os.path.join(temp_dir_path, 'spawn_map_with_frames.png')
         cv2.imwrite(debug_image_path, debug_img_bgr)
         
-        print(f"Debug map saved to: {debug_image_path}")
+        print(f"Debug spawn map saved to: {debug_image_path}")
         # --- DEBUG SECTION END ---
 
         return [world_x, world_y, 0.0, world_theta]

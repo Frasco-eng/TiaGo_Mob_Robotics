@@ -38,8 +38,6 @@ class GlobalLocalizationNode(Node):
             depth=1                                         # Depth of 1 for last message
         )
 
-        
-        
         ##################################
         # Subscribers
         ##################################
@@ -242,8 +240,8 @@ def main(args=None):
     rclpy.init(args=args)
 
     node = GlobalLocalizationNode()
-    
-    time.sleep(3.0)
+
+    time.sleep(2.0)  # Small delay to ensure everything is set up
 
     node.localization_process()
 

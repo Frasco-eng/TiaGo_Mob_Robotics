@@ -37,184 +37,11 @@ from launch.actions import ExecuteProcess
 # Python Libraries
 import os
 from os import environ, pathsep
-import numpy as np
-import cv2
-import yaml
-import math
-import time
-import random
+from tiago_exam import utils
 
 ##################################
 # Functions
 ##################################
-def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.0) -> list[float]:
-    """
-    Generates a random pose (x, y, theta) on the map defined by map_path,
-    ensuring the pose is in free space with a specified clearance from obstacles.
-    
-    Parameters
-    ----------
-    map_path : str
-        Path to the YAML map file.
-    safe_coords : list of float
-        Default safe coordinates to return in case of failure [x, y, z, theta].
-    clearance : float
-        Minimum distance from obstacles in meters.
-        
-    Returns
-    -------
-    list of float
-        Random pose [x, y, z, theta] in world coordinates.
-    """
-    random.seed(time.time())
-    
-    print(f"Generating random pose from map: {map_path} with clearance {clearance}m")
-    try: 
-        # Load map YAML
-        with open(map_path, 'r') as f:
-            map_data = yaml.safe_load(f)
-        
-        # Extract map parameters
-        resolution = map_data['resolution']
-        origin = map_data['origin']
-
-        # Load the map image
-        pgm_path = os.path.join(os.path.dirname(map_path), map_data['image'])
-        img = cv2.imread(pgm_path, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            raise FileNotFoundError(f"Map Image not found: {pgm_path}")
-
-                
-        
-        # 1. Threshold strictly: only 255 (white) is truly free
-        _, binary_map = cv2.threshold(img, 250, 255, cv2.THRESH_BINARY)
-
-        # 2. Compute distance from obstacles (0s)
-        dist_map = cv2.distanceTransform(binary_map, cv2.DIST_L2, 5)
-
-        # 3. Convert clearance meters to pixels
-        # Add a small buffer (e.g., 0.1m) to account for robot footprint
-        effective_clearance_px = (clearance + 0.1) / resolution
-
-        # 4. Filter pixels that satisfy the clearance
-        safe_indices = np.where(dist_map >= effective_clearance_px)
-        whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
-
-        # DEBUG: Save the distance map image
-        debug_img = np.zeros_like(img)
-        for r, c in whitelist_pixels:
-            debug_img[r, c] = 255
-        temp_dir_path = os.path.join(get_package_src_directory('tiago_exam'), 'temp')
-        if not os.path.exists(temp_dir_path):
-            os.makedirs(temp_dir_path)
-        debug_image_path = os.path.join(temp_dir_path, 'debug_map.png')
-        cv2.imwrite(debug_image_path, debug_img)
-        print(f"Safe spawn pixels image saved to /temp/debug_safe_spawn.png")
-
-        if not whitelist_pixels:
-            print("No safe pixels found! Reducing clearance requirements...")
-            # Fallback: find the max distance available if requested clearance is too high
-            max_dist = np.max(dist_map)
-            safe_indices = np.where(dist_map >= max_dist * 0.9)
-            whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
-
-        # 5. Pick and Convert
-        pixel_r, pixel_c = random.choice(whitelist_pixels)
-        height, width = img.shape
-        
-        # Standard ROS Map Transform
-        # world_x = origin[0] + (pixel_c * resolution) 
-        # world_y = origin[1] + ((height - pixel_r) * resolution) - safe_coords[1] # Using height-pixel_r
-
-        world_x = origin[0] + (pixel_c * resolution) 
-        world_y = origin[1] + ((height - pixel_r) * resolution) + safe_coords[1] # Using height-pixel_r
-        
-        world_theta = random.uniform(-math.pi, math.pi) 
-        
-        # --- DEBUG SECTION START ---
-        # Create a 3-channel BGR image for colorful markers
-        debug_img_bgr = cv2.cvtColor(binary_map, cv2.COLOR_GRAY2BGR)
-
-        # A. Highlight Safe Zone (Light Green)
-        for r, c in whitelist_pixels:
-            debug_img_bgr[r, c] = [200, 255, 200] 
-
-        # B. Draw OpenCV Origin & Axes (Top-Left)
-        # CV Origin is (0,0). X is Col (Right), Y is Row (Down)
-        cv2.circle(debug_img_bgr, (5, 5), 5, (0, 0, 255), -1) 
-        cv2.arrowedLine(debug_img_bgr, (5, 5), (55, 5), (0, 0, 255), 2, tipLength=0.3)  # Red X
-        cv2.arrowedLine(debug_img_bgr, (5, 5), (5, 55), (0, 255, 0), 2, tipLength=0.3)  # Green Y
-        cv2.putText(debug_img_bgr, "CV Origin", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-
-        # C. Draw ROS World Origin & Axes
-    
-        ros_origin_px_x = int((0.0 - origin[0]) / resolution)
-        ros_origin_px_y = int(height - ((0.0 - origin[1] - safe_coords[1]) / resolution))
-
-        
-        cv2.drawMarker(debug_img_bgr, (ros_origin_px_x, ros_origin_px_y), 
-                    (255, 0, 0), cv2.MARKER_CROSS, 20, 1)
-        
-        # Length of axis in pixels (e.g., 1 meter)
-        axis_len_px = int(1.0 / resolution)
-
-        # Draw ROS X Axis (Blue) -> Points Right
-        cv2.arrowedLine(debug_img_bgr, 
-                        (ros_origin_px_x, ros_origin_px_y), 
-                        (ros_origin_px_x + axis_len_px, ros_origin_px_y), 
-                        (0, 0, 255), 2, tipLength=0.3)
-        
-        # Draw ROS Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
-        cv2.arrowedLine(debug_img_bgr, 
-                        (ros_origin_px_x, ros_origin_px_y), 
-                        (ros_origin_px_x, ros_origin_px_y - axis_len_px), 
-                        (0, 255, 0), 2, tipLength=0.3)
-
-        cv2.putText(debug_img_bgr, "World", 
-                    (ros_origin_px_x + 10, ros_origin_px_y - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-        
-        # D. Mark Selected Spawn Point (Yellow)
-        
-        cv2.drawMarker(debug_img_bgr, (pixel_c, pixel_r), 
-                    (0, 0, 0), cv2.MARKER_STAR, 20, 1)
-        cv2.putText(debug_img_bgr, "Spawn", 
-                    (pixel_c + 10, pixel_r - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
-                
-    
-        # Save Debug Image
-        debug_image_path = os.path.join(temp_dir_path, 'debug_map_with_frames.png')
-        cv2.imwrite(debug_image_path, debug_img_bgr)
-        
-        
-        print(f"Debug map saved to: {debug_image_path}")
-        # --- DEBUG SECTION END ---
-
-        return [world_x, world_y, 0.0, world_theta]
-    
-    except Exception as e:
-        print(f"Error generating random pose: {e}")
-        return safe_coords
-    
-def get_package_src_directory(package_name):
-    install_path = get_package_share_directory(package_name)
-    
-    # install_path: .../workspace/install/nome_pkg/share/nome_pkg
-    workspace_path = install_path
-    for _ in range(4):
-        workspace_path = os.path.dirname(workspace_path)
-    
-    # Build the src path
-    src_path = os.path.join(workspace_path, 'src', package_name)
-    
-    # Safety check
-    if not os.path.exists(src_path):
-        print(f"[WARN] Cannot find {src_path}. Are you using a standard workspace?")
-        return None
-        
-    return src_path
-
 def get_model_paths(packages_names: list[str]) -> str:
     """
     Constructs the GAZEBO_MODEL_PATH by aggregating 'share' directories from the specified packages.
@@ -282,7 +109,7 @@ def launch_setup(context, *args, **kwargs):
         map_name = 'env_map'
 
     # Directories
-    pkg_dir = get_package_src_directory('tiago_exam')
+    pkg_dir = utils.get_package_src_directory('tiago_exam')
     
     # Map path
     map_path = os.path.join(pkg_dir, f"maps/{world_name}_{map_name}.yaml")
@@ -292,7 +119,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Coordinates generation
     #coordinates = [0.0, -1.3, 0.0, 0.0]  # Default coordinates if random generation fails
-    coordinates = map_pose_random_generator(map_path)  
+    coordinates = utils.map_pose_random_generator(map_path)  
 
     ##############
     # Launch Descriptions
@@ -341,7 +168,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Safe delay before tucking the arm
     delayed_tuck_arm = TimerAction(
-        period=5.0,
+        period=8.0,
         actions=[tuck_arm]
     )
 
@@ -446,6 +273,13 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
     
+    event_handler_tuck_to_localization = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=tuck_arm,
+            on_exit=[localization],
+        )
+    )
+    
     # Event handler to start exploration after localization ends
     event_handler_localization_exploration = RegisterEventHandler(
         event_handler=OnProcessExit(
@@ -455,10 +289,8 @@ def launch_setup(context, *args, **kwargs):
     )
     
     
-
-
-    return [gazebo, tiago_spawn, tiago_bringup, tiago_nav_bringup,
-            localization, move_group, aruco_place, aruco_pick, event_handler_localization_exploration, delayed_tuck_arm]
+    return [tiago_spawn, tiago_bringup, move_group, tiago_nav_bringup, delayed_tuck_arm,
+            localization, aruco_place, aruco_pick, event_handler_localization_exploration]
 
 ##################################
 # Generate Launch Description

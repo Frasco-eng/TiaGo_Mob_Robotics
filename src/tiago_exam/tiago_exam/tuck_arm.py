@@ -37,6 +37,8 @@ class ArmTucker(Node):
 
         # Publisher to notify when tuck is complete
         self.tuck_complete_pub = self.create_publisher(Bool, '/arm_tuck_complete', qos_profile)
+        
+        self.success = False
 
     def tuck_arm(self):
         self.get_logger().info('Waiting for MoveIt action server...')
@@ -67,21 +69,21 @@ class ArmTucker(Node):
 
         # 3. Send the Goal
         self._send_goal_future = self._action_client.send_goal_async(goal_msg)
-        rclpy.spin_until_future_complete(self, self._send_goal_future)
-
-        goal_handle = self._send_goal_future.result()
+        self._send_goal_future.add_done_callback(self.goal_response_callback)
+        
+    def goal_response_callback(self, future):
+        goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().error('Goal rejected by MoveIt')
-            return False
+            return
 
-        self.get_logger().info('Goal accepted, moving...')
-        
-        # 4. Wait for result
+        self.get_logger().info('Goal accepted by MoveIt')
         self._get_result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, self._get_result_future)
         
-        result = self._get_result_future.result().result
+        self._get_result_future.add_done_callback(self.get_result_callback)
         
+    def get_result_callback(self, future):
+        result = future.result().result
         tuck_msg = Bool()
         # Error code 1 means SUCCESS
         if result.error_code.val == 1:
@@ -90,13 +92,14 @@ class ArmTucker(Node):
             tuck_msg.data = True
             self.tuck_complete_pub.publish(tuck_msg)
 
-            return True
+            self.success = True
         else:
             self.get_logger().error(f'Motion failed with error code: {result.error_code.val}')
             tuck_msg.data = False
             self.tuck_complete_pub.publish(tuck_msg)
-            return False
-
+            self.success = False
+        
+            
 def main(args=None):
     rclpy.init(args=args)
     node = ArmTucker()
@@ -104,15 +107,16 @@ def main(args=None):
     success = False
     # Simple retry loop
     for i in range(3):
-        if node.tuck_arm():
+        node.tuck_arm()
+        if node.success:
             success = True
             break
+            
         node.get_logger().warn(f'Retrying... ({i+1}/3)')
 
     if success:
         node.get_logger().info('Tuck complete. Node staying alive to hold latch...')
-        # This keeps the node running so the topic stays visible 
-        # and late-subscribers can grab the message.
+        
         try:
             rclpy.spin(node) 
         except KeyboardInterrupt:

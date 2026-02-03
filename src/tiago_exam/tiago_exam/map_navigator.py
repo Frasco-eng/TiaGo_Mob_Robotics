@@ -13,11 +13,15 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import PoseStamped
 
+from nav_msgs.msg import Odometry
+
 from geometry_msgs.msg import Twist
 from std_srvs.srv import Trigger
 
 # Custom service
 from exam_interfaces.srv import StartNavigation
+
+ANGULAR_SPEED = 1.0  # radians per second
 
 ##################################
 # Map Navigator Service
@@ -29,11 +33,25 @@ class MapNavigatorService(Node):
         
         self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         
+        self.current_yaw = None
+        
+        ##################################
+        # Subscriptions
+        ##################################
+        
+        self.odom_sub = self.create_subscription(
+            Odometry,
+            'mobile_base_controller/odom',
+            self.odom_callback,
+            10,
+            callback_group=self.cb_group
+        )
+        
+        
         ##################################
         # Service Server
         ##################################
         self.srv = self.create_service(StartNavigation, 'start_nav_srv', self.handle_navigation, callback_group=self.cb_group)
-        
         self.rotate_srv = self.create_service(Trigger, 'rotate_360', self.handle_rotate_360, callback_group=self.cb_group)
         
         ##################################
@@ -45,6 +63,22 @@ class MapNavigatorService(Node):
     ##################################
     # Callback
     ##################################
+    
+    def odom_callback(self, msg: PoseStamped) -> None:
+        """
+        Callback function for odometry updates.
+
+        Parameters
+        ----------
+        msg : PoseStamped
+            The current pose of the robot.
+        """
+        # Extract yaw from quaternion
+        q = msg.pose.pose.orientation
+        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+        self.current_yaw = math.atan2(siny_cosp, cosy_cosp)
+    
     def handle_navigation(self, request: PoseStamped, response: bool) -> bool:
         """
         Handle navigation requests by sending goals to the NavigateToPose action server.
@@ -61,21 +95,21 @@ class MapNavigatorService(Node):
         response : bool
             True if navigation succeeded, False otherwise.
         """
-        self.get_logger().info("Sending goal...")
+        self.get_logger().debug("Sending goal...")
 
         # Wait for the action server to be available
         if not self.nav_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().error("NavigateToPose action server not available!")
             response.success = False
             return response
+        
+        self.stop()
 
         # Create goal message
         goal = NavigateToPose.Goal()
 
         # Set the goal pose from the request
         goal.pose = request.pose
-        
-        self.get_logger().info(f"Goal Pose: {goal.pose}")
                 
         # Wait for goal acceptance
         send_goal_future = self.nav_client.send_goal_async(goal)
@@ -115,11 +149,13 @@ class MapNavigatorService(Node):
         self.get_logger().info("Request received: Starting 360 rotation...")
 
         # Configuration
-        angular_speed = 0.5  # rad/s
+        angular_speed = ANGULAR_SPEED  # rad/s
         # Calculate duration: Full circle (2*PI) / speed
         target_duration = (2 * math.pi) / angular_speed
         # Add a small buffer to ensure full coverage
-        target_duration += 0.5 
+        
+        initial_yaw = self.current_yaw
+        angle_thresh = 0.1  # radians
 
         # Create velocity message
         vel_msg = Twist()
@@ -129,7 +165,7 @@ class MapNavigatorService(Node):
         start_time = time.time()
         
         # Loop to publish velocity commands
-        while (time.time() - start_time) < target_duration:
+        while (time.time() - start_time) < target_duration or abs(self.current_yaw - initial_yaw) > angle_thresh:
             # Check if ROS is still active
             if not rclpy.ok():
                 response.success = False
@@ -140,13 +176,19 @@ class MapNavigatorService(Node):
             time.sleep(0.1) # 10Hz publish rate
 
         # Stop the robot after rotation
-        vel_msg.angular.z = 0.0
-        self.cmd_vel_pub.publish(vel_msg)
+        self.stop()
 
         self.get_logger().info("Rotation complete.")
         response.success = True
         response.message = "360 Rotation Completed"
         return response
+    
+    def stop(self) -> None:
+        """
+        Stops the robot by publishing zero velocities.
+        """
+        vel_msg = Twist()
+        self.cmd_vel_pub.publish(vel_msg)
 
 ##################################
 # Main Function

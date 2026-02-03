@@ -232,8 +232,17 @@ class Manipulator(Node):
         return response
     
     def move_to_joints(self, joint_positions: list) -> bool:
-        self.arm.move_to_configuration(joint_positions)
-        return self.arm.wait_until_executed()
+        for i in range(10):
+            self.arm.move_to_configuration(joint_positions)
+            success = self.arm.wait_until_executed()
+            if success:
+                break
+            else:
+                self.get_logger().warning(f"Attempt {i+1}/10: Failed to reach joint positions, retrying...")
+                
+        if i == 9 and not success:
+            self.get_logger().error("Exceeded maximum attempts to reach joint positions.")     
+        return success
     
     ##################################
     # Helper Functions
@@ -242,9 +251,17 @@ class Manipulator(Node):
         pose = pose.pose
         position = [pose.position.x, pose.position.y, pose.position.z]
         quat = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
-
-        self.arm.move_to_pose(position=position, quat_xyzw=quat, cartesian=cartesian)
-        success = self.arm.wait_until_executed()
+        
+        i = 0
+        for i in range (10):
+            self.arm.move_to_pose(position=position, quat_xyzw=quat, cartesian=cartesian)
+            success = self.arm.wait_until_executed()
+            if success:
+                break
+            else:
+                self.get_logger().warning(f"Attempt {i+1}/10: Failed to reach pose, retrying...")
+        if i == 9 and not success:
+            self.get_logger().error("Exceeded maximum attempts to reach pose.")     
         return success
      
     ##################################

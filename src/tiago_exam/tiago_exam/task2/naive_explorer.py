@@ -14,14 +14,16 @@ from geometry_msgs.msg import PoseStamped
 from exam_interfaces.srv import InitGoals
 from exam_interfaces.srv import GetNextGoal
 
+from tiago_exam import utils
+
+
 # Python Standard Libraries
 import yaml
 import os
 import cv2
 import numpy as np
 import random
-from tiago_exam import utils
-
+import os
 ##################################
 # Naive Explorer Node
 ##################################
@@ -191,7 +193,10 @@ class NaiveExplorer(Node):
             dist_map = cv2.distanceTransform(binary_map, cv2.DIST_L2, 5)
 
             # Identify safe pixels based on clearance
-            safe_indices = np.where(dist_map >= (self.clearance / resolution))
+            effective_clearance_px = (self.clearance + 0.1) / resolution
+            
+            safe_indices = np.where(dist_map >= effective_clearance_px)
+            whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
 
             # Generate whitelist of safe pixels
             whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
@@ -203,7 +208,62 @@ class NaiveExplorer(Node):
             for _ in range(self.init_goals):
                 r, c = random.choice(whitelist_pixels) # row, col (pixel coordinates)
                 wx.append(origin[0] + c * resolution) # x, y (world coordinates)
-                wy.append(origin[1] + (h - r) * resolution -1.3)
+                wy.append(origin[1] + (h - r) * resolution)
+
+
+            # --- DEBUG SECTION START ---
+            temp_dir_path = os.path.join(utils.get_package_src_directory('tiago_exam'), 'temp')
+            if not os.path.exists(temp_dir_path):
+                os.makedirs(temp_dir_path)
+            # Create a 3-channel BGR image for colorful markers
+            debug_img_bgr = cv2.cvtColor(binary_map, cv2.COLOR_GRAY2BGR)
+
+            # A. Highlight Safe Zone (Light Green)
+            for r, c in whitelist_pixels:
+                debug_img_bgr[r, c] = [200, 255, 200] 
+
+            # B. Draw OpenCV Origin & Axes (Top-Left)
+            # CV Origin is (0,0). X is Col (Right), Y is Row (Down)
+            cv2.circle(debug_img_bgr, (5, 5), 5, (0, 0, 255), -1) 
+            cv2.arrowedLine(debug_img_bgr, (5, 5), (55, 5), (0, 0, 255), 2, tipLength=0.3)  # Red X
+            cv2.arrowedLine(debug_img_bgr, (5, 5), (5, 55), (0, 255, 0), 2, tipLength=0.3)  # Green Y
+            cv2.putText(debug_img_bgr, "CV Origin", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+            # C. Draw ROS World Origin & Axes
+            ros_origin_px_x = int((0.0 - origin[0]) / resolution)
+            ros_origin_px_y = int(h - ((0.0 - origin[1]) / resolution))
+
+            cv2.drawMarker(debug_img_bgr, (ros_origin_px_x, ros_origin_px_y), 
+                        (255, 0, 0), cv2.MARKER_CROSS, 20, 1)
+            
+            # Length of axis in pixels (e.g., 1 meter)
+            axis_len_px = int(1.0 / resolution)
+
+            # Draw ROS X Axis (Blue) -> Points Right
+            cv2.arrowedLine(debug_img_bgr, 
+                            (ros_origin_px_x, ros_origin_px_y), 
+                            (ros_origin_px_x + axis_len_px, ros_origin_px_y), 
+                            (0, 0, 255), 2, tipLength=0.3)
+            
+            # Draw ROS Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
+            cv2.arrowedLine(debug_img_bgr, 
+                            (ros_origin_px_x, ros_origin_px_y), 
+                            (ros_origin_px_x, ros_origin_px_y - axis_len_px), 
+                            (0, 255, 0), 2, tipLength=0.3)
+
+            cv2.putText(debug_img_bgr, "World", 
+                        (ros_origin_px_x + 10, ros_origin_px_y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+            
+            
+            # Save Debug Image
+            debug_image_path = os.path.join(temp_dir_path, 'exploration_map.png')
+            cv2.imwrite(debug_image_path, debug_img_bgr)
+            
+            print(f"Debug map saved to: {debug_image_path}")
+            # --- DEBUG SECTION END ---
+
+                
             return wx, wy
         except Exception as e:
             print(f"Map Error: {e}")

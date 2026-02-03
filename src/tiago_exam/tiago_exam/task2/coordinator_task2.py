@@ -25,9 +25,29 @@ import math
 # State Class
 ##################################
 class State(Enum):
+    """
+    Enumeration for the different states of the coordinator state machine.
+
+    Attributes
+    ----------
+    INIT : int
+        Initial State
+    EXPLORING : int
+        Exploring the environment
+    ROTATING : int
+        Rotating to scan for markers
+    TRACKING : int
+        Tracking a detected marker
+    INSPECTING : int
+        Inspecting the marker
+    HOMING : int
+        Returning to home position
+    DONE : int
+        Finished task 2
+    """
     INIT = 0            # Initial State
     EXPLORING = 1       # Exploring the environment
-    ROTATING = 2       # Rotating to scan for markers
+    ROTATING = 2        # Rotating to scan for markers
     TRACKING = 3        # Tracking a detected marker
     INSPECTING = 4      # Inspecting the marker
     HOMING = 5          # Returning to home position
@@ -49,21 +69,28 @@ class CoordinatorTask2(Node):
         # State Variables
         ##################################
         self.state = State.INIT
-        
-        self.init_goals = 20
-        self.clearance = 0.5
-        
+
+        ##################################
+        # Head Variables
+        ##################################
         self.pan = 0.0
         self.tilt = 0.0
+
+        ##################################
+        # Navigation Variables
+        ##################################
+        self.init_goals = 20                    # Number of initial exploration goals
+        self.clearance = 0.7                    # Clearance around obstacles for exploration
+        self.nav_in_progress = False            # Flag to indicate if navigation is in progress
+        self.nav_outcome = False                # Outcome of the last navigation attempt
+        self.rotate_in_progress = False         # Flag to indicate if rotation is in progress
+        self.rotate_outcome = False             # Outcome of the last rotation attempt
         
-        self.nav_in_progress = False
-        self.nav_outcome = False
-        self.rotate_in_progress = False
-        self.rotate_outcome = False
-        
-        self.home_pose = PoseStamped()
-        self.home_pose.header.frame_id = 'map'
+        self.home_pose = PoseStamped()          # Home pose to return to
+        self.home_pose.header.frame_id = 'map'  
         self.home_pose.pose.orientation.w = 1.0
+        
+        self.timer = self.create_timer(1.0, self.timer_callback, callback_group=self.callback_group)
 
         ##################################
         # Marker Tracking Variables
@@ -91,12 +118,18 @@ class CoordinatorTask2(Node):
         self.create_subscription(PoseStamped, 'detected_marker_real_pose', self.real_marker_callback, 10, callback_group=self.callback_group)
         self.create_subscription(HeadPose, 'head_pose', self.head_pose_callback, 10, callback_group=self.callback_group)
     
-      
-    
     ##################################
-    # Callbacks
+    # Subscription Callbacks
     ##################################
     def marker_approach_callback(self, msg: PoseStamped) -> None:
+        """
+        Callback for detected marker approach poses.
+
+        Parameters
+        ----------
+        msg : PoseStamped
+            The pose of the detected marker to approach.
+        """
         # Extract marker ID from frame_id
         marker_id = msg.header.frame_id
         
@@ -120,9 +153,40 @@ class CoordinatorTask2(Node):
                 self.get_logger().info(f"MARKER DETECTED: {marker_id}")
     
     def real_marker_callback(self, msg: PoseStamped) -> None:
+        """
+        Callback for receiving the real pose of the detected marker.
+
+        Parameters
+        ----------
+        msg : PoseStamped
+            The real pose of the detected marker.
+        """
         self.last_valid_real_pose = msg
+
+    def head_pose_callback(self, msg: HeadPose) -> None:
+        """
+        Callback for head pose updates.
+
+        Parameters
+        ----------
+        msg : HeadPose
+            The current head pose.
+        """
+        self.pan = msg.pan
+        self.tilt = msg.tilt
+    
+    ##################################
+    # Client Callbacks
+    ##################################
+    def nav_response_callback(self, future) -> None:
+        """
+        Callback for navigation service response.
         
-    def nav_response_callback(self, future):
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
+        """
         try:
             response = future.result()
             self.nav_outcome = response.success
@@ -134,10 +198,17 @@ class CoordinatorTask2(Node):
             self.get_logger().error(f"Service call failed: {e}")
             self.nav_outcome = False
         finally:
-            # IMPORTANT: Lower the flag so the main loop knows we are done
             self.nav_in_progress = False
         
-    def save_marker_callback(self, future):
+    def save_marker_callback(self, future) -> None:
+        """
+        Callback for save marker service response.
+
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
+        """
         try:
             response = future.result()
             if response.success:
@@ -147,7 +218,15 @@ class CoordinatorTask2(Node):
         except Exception as e:
             self.get_logger().error(f"Service call failed: {e}")
     
-    def move_head_response_callback(self, future):
+    def move_head_response_callback(self, future) -> None:
+        """
+        Callback for move head service response.
+
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
+        """
         try:
             response = future.result()
             if response.success:
@@ -156,12 +235,16 @@ class CoordinatorTask2(Node):
                 self.get_logger().warn("Failed to move head.")
         except Exception as e:
             self.get_logger().error(f"Service call failed: {e}")
-    
-    def head_pose_callback(self, msg: HeadPose) -> None:
-        self.pan = msg.pan
-        self.tilt = msg.tilt
         
-    def rotate_response_callback(self, future):
+    def rotate_response_callback(self, future) -> None:
+        """
+        Callback for rotate 360 service response.
+
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
+        """
         try:
             response = future.result()
             if response.success:
@@ -174,6 +257,11 @@ class CoordinatorTask2(Node):
         finally:
             self.rotate_in_progress = False
             
+    def timer_callback(self):
+        """
+        Timer callback to periodically log the current state.
+        """
+        self.get_logger().info(f"--- COORDINATOR STATE ---: {self.state.name}")
 
     ##################################
     # Methods
@@ -225,7 +313,7 @@ class CoordinatorTask2(Node):
         nav_req = StartNavigation.Request()
         nav_req.pose = goal
         
-        self.get_logger().info("Sending navigation goal (Async)...")
+        self.get_logger().debug("Sending navigation goal (Async)...")
 
         self.nav_in_progress = True
         self.nav_outcome = False
@@ -303,7 +391,7 @@ class CoordinatorTask2(Node):
                 
                 # --- INIT ---
                 case State.INIT:
-                    self.get_logger().info("--- State: INIT ---")
+                    self.get_logger().debug("--- State: INIT ---")
 
                     # Save the home pose
                     self.home_pose = PoseStamped()
@@ -321,7 +409,7 @@ class CoordinatorTask2(Node):
 
                 # --- EXPLORING ---
                 case State.EXPLORING:
-                    self.get_logger().info(f"--- State: EXPLORING ---")
+                    self.get_logger().debug(f"--- State: EXPLORING ---")
 
                     
                     if self.is_new_marker_detected:
@@ -367,7 +455,15 @@ class CoordinatorTask2(Node):
                 
                 # --- ROTATING ---
                 case State.ROTATING:
-                    self.get_logger().info("--- State: ROTATING ---")
+                    self.get_logger().debug("--- State: ROTATING ---")
+                    
+                    if self.is_new_marker_detected:
+                        self.get_logger().info("New marker detected! Switching to TRACKING.")
+                        self.state = State.TRACKING
+                        self.is_new_marker_detected = False
+                        self.rotate_outcome = False
+                        self.rotate_in_progress = False
+                        continue       
                     
                     # 1. Start Rotation
                     if not self.rotate_in_progress and not self.rotate_outcome:
@@ -376,8 +472,6 @@ class CoordinatorTask2(Node):
                     
                     # 2. Wait for Rotation
                     elif self.rotate_in_progress and not self.rotate_outcome:
-                        # Note: Even if we detect a marker here, we can't stop the service 
-                        # because it's running in the other node. We just wait.
                         time.sleep(0.5)
                         continue
                     
@@ -387,26 +481,20 @@ class CoordinatorTask2(Node):
                         self.rotate_outcome = False
                         self.rotate_in_progress = False
                         
-                        # Check if a marker was found DURING the rotation
-                        if self.is_new_marker_detected:
-                            self.get_logger().info("Marker detected during rotation! Switching to TRACKING.")
-                            self.state = State.TRACKING
-                            self.is_new_marker_detected = False
-                        else:
-                            self.state = State.EXPLORING
+                        self.state = State.EXPLORING
                                                     
                 # --- TRACKING  ---
                 case State.TRACKING:
-                    self.get_logger().info("--- State: TRACKING ---")
-                    self.get_logger().info(f"Tracking: {self.target_marker_id}")
-
+                    self.get_logger().debug("--- State: TRACKING ---")
+                    
                     # Check if we have a valid target marker pose, otherwise return to EXPLORING
                     if not self.target_marker_pose:
                         self.get_logger().info("No valid target marker pose. Returning to EXPLORING.")
                         self.state = State.EXPLORING
                         continue
                     
-                    if not self.nav_in_progress and not self.nav_outcome:
+                    if not self.nav_in_progress and not self.nav_outcome and not self.rotate_in_progress and not self.rotate_outcome:
+                        self.get_logger().info(f"Tracking: {self.target_marker_id}")
                         current_active_goal = self.target_marker_pose
                         self.call_send_nav_goal_srv(current_active_goal)
                       
@@ -437,13 +525,15 @@ class CoordinatorTask2(Node):
                             # Reset flags
                             self.nav_outcome = False
                             self.nav_in_progress = False
+                            self.rotate_outcome = False
+                            self.rotate_in_progress = False
                             
                             # Switch to INSPECTING state
                             self.state = State.INSPECTING
                 
                 # --- INSPECTING ---
                 case State.INSPECTING:
-                    self.get_logger().info("--- State: INSPECTING ---")
+                    self.get_logger().debug("--- State: INSPECTING ---")
                     
                     if self.last_valid_real_pose is None:
                         self.get_logger().warn("Waiting for real pose...")
@@ -477,7 +567,7 @@ class CoordinatorTask2(Node):
 
                 # --- HOMING ---
                 case State.HOMING:
-                    self.get_logger().info("--- State: HOMING ---")
+                    self.get_logger().debug("--- State: HOMING ---")
                     if not self.home_pose:
                         self.get_logger().error("No home pose defined. Switching to DONE.")
                         self.state = State.DONE
@@ -501,8 +591,10 @@ class CoordinatorTask2(Node):
 
                 # --- DONE ---
                 case State.DONE:
-                    self.get_logger().info("--- State: DONE ---")
-                    # End state machine
+                    self.get_logger().debug("--- State: DONE ---")
+                    self.get_logger().info("Task 2 completed successfully")
+                    
+                    rclpy.shutdown()
                     break
 
 

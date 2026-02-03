@@ -84,14 +84,14 @@ class State(Enum):
     DONE : int
         Final state indicating task completion.
     """
-    INIT = 0        # Read pick/place locations from CSV
-    NAVIGATE_PICK = 1    # Navigate to pick location
-    PICK = 2        # Perform pick operation
-    NAVIGATE_PLACE = 3   # Navigate to place location
-    PLACE = 4       # Perform place operation
-    NEXT_CUBE = 5   # Check if more cubes to process
-    HOME = 6        # Return to home position
-    DONE = 7        # Task completed
+    INIT = 0                # Read pick/place locations from CSV
+    NAVIGATE_PICK = 1       # Navigate to pick location
+    PICK = 2                # Perform pick operation
+    NAVIGATE_PLACE = 3      # Navigate to place location
+    PLACE = 4               # Perform place operation
+    NEXT_CUBE = 5           # Check if more cubes to process
+    HOME = 6                # Return to home position
+    DONE = 7                # Task completed
 
 ##################################
 # Coordinator Node
@@ -141,6 +141,10 @@ class CoordinatorTask3(Node):
         self.base_T_marker: Optional[kdl.Frame] = None
 
         self.home_pose = None
+        
+        self.timer = self.create_timer(1.0, self.timer_callback)
+
+        self.detection_start_time = None
 
         ##################################
         # Cubes Variables
@@ -211,10 +215,8 @@ class CoordinatorTask3(Node):
 
     def aruco_callback(self, msg: TransformStamped, marker_id: int):
         
-        # Check if the detected marker matches the one we are currently looking for
         if self.cubes_id[self.current_cube_idx] == marker_id:
-            self.latest_aruco_frame = msg # Save the PoseStamped
-            self.get_logger().info(f"Received ArUco marker {marker_id} pose, TransformStamped {msg}")
+            self.latest_aruco_frame = msg 
             
             
     def nav_response_callback(self, future):
@@ -300,6 +302,10 @@ class CoordinatorTask3(Node):
         manip_future.add_done_callback(self.move_manip_response_callback)
         
 
+    def timer_callback(self):
+        self.get_logger().info(f"--- COORDINATOR STATE ---: {self.state.name}")
+        
+    
     ##################################
     # Method
     ##################################
@@ -436,7 +442,7 @@ class CoordinatorTask3(Node):
 
         match self.current_state:
             case State.INIT:
-                self.get_logger().info("--- State: INIT ---")
+                self.get_logger().debug("--- State: INIT ---")
 
                 # 1. Check if all required services are available
                 if not self.nav_client.service_is_ready() or \
@@ -459,6 +465,7 @@ class CoordinatorTask3(Node):
                 # Load cubes to pick
                 for cube_id in self.cubes_id:
                     self.cubes_to_pick.append(CubeLocation(marker_id=cube_id))
+                    self.get_logger().info(f'Added cube with marker ID {cube_id} to the pick list.')
 
                 # Look for cubes to pick
                 if self.cubes_to_pick:
@@ -468,7 +475,7 @@ class CoordinatorTask3(Node):
                     self.get_logger().error('No cubes to pick?')
         
             case State.NAVIGATE_PICK:
-                self.get_logger().info("--- State: NAVIGATE_PICK ---")
+                self.get_logger().debug("--- State: NAVIGATE_PICK ---")
 
                 if self.current_cube_idx < len(self.cubes_to_pick):
     
@@ -497,7 +504,7 @@ class CoordinatorTask3(Node):
                     self.current_state = State.HOME
         
             case State.PICK:
-                self.get_logger().info("--- State: PICK ---")
+                self.get_logger().debug("--- State: PICK ---")
                 
                 if not self.move_head_in_progress and not self.move_head_outcome:
                     self.get_logger().info("Positioning head for pick...")
@@ -506,12 +513,13 @@ class CoordinatorTask3(Node):
                 elif self.move_head_in_progress and not self.move_head_outcome:
                     self.get_logger().info("Head movement in progress...")
                     time.sleep(0.5)
+                    
                 else:
-                    self.get_logger().info("Head positioned. Preparing for pick...")
-                    # self.latest_aruco_frame = None
-                    self.detection_start_time = time.time() 
+                    if self.detection_start_time is None:
+                        self.detection_start_time = time.time() 
                     
                     if not self.move_manip_in_progress and not self.move_manip_outcome:
+                        self.get_logger().info("Head positioned. Preparing for pick...")
                         
                         if self.latest_aruco_frame is not None:
                             grasp_pose = self.get_transformed_aruco_pose()
@@ -553,16 +561,15 @@ class CoordinatorTask3(Node):
                         
                         self.move_head_outcome = False
                         self.move_head_in_progress = False
-                        
                         self.latest_aruco_frame = None
-                    
                         self.move_manip_in_progress = False
                         self.move_manip_outcome = False
+                        self.detection_start_time = None
                     
                         self.current_state = State.NAVIGATE_PLACE
                                 
             case State.NAVIGATE_PLACE:
-                self.get_logger().info("--- State: NAVIGATE_PLACE ---")
+                self.get_logger().debug("--- State: NAVIGATE_PLACE ---")
                 
                 if not self.move_head_in_progress and not self.move_head_outcome:
                     self.call_move_head_srv(pan=0.0, tilt=0.0)
@@ -570,13 +577,12 @@ class CoordinatorTask3(Node):
                     self.get_logger().info("Head movement in progress...")
                     time.sleep(0.5)
                 else:
-                    self.get_logger().info("Head centered.")
                     
-                    if self.current_cube_idx < len(self.cubes_to_pick):
-                                
+                    if self.current_cube_idx < len(self.cubes_to_pick):            
                         cube = self.cubes_to_pick[self.current_cube_idx]
                         
                         if not self.nav_in_progress and not self.nav_outcome:
+                            self.get_logger().info("Head centered.")
                             
                             goal = self.get_map_goal_pose('place')
                             
@@ -600,12 +606,10 @@ class CoordinatorTask3(Node):
                         self.current_state = State.HOME
         
             case State.PLACE:
-                self.get_logger().info("--- State: PLACE ---")
+                self.get_logger().debug("--- State: PLACE ---")
 
-                
-                self.get_logger().info("Positioning head for place...")
-                
                 if not self.move_head_in_progress and not self.move_head_outcome:
+                    self.get_logger().info("Positioning head for place...")
                     self.call_move_head_srv(pan=0.0, tilt=-0.7)
 
                 elif self.move_head_in_progress and not self.move_head_outcome:
@@ -613,12 +617,11 @@ class CoordinatorTask3(Node):
                     time.sleep(0.5)
                 else:
                     
-                    self.get_logger().info("Head positioned. Preparing for place...")
-                    
                     if not self.move_manip_in_progress and not self.move_manip_outcome:
+                        self.get_logger().info("Head positioned. Preparing for place...")
                         realease_pose = self.cubes_to_pick[self.current_cube_idx].grasp_pose
                         self.cubes_to_pick[self.current_cube_idx].release_pose = realease_pose
-                        realease_pose.position.z = self.height_place # Update z for place with safety offset                   
+                        realease_pose.position.z = self.height_place
 
                         # Publish TF
                         self.publish_tf(realease_pose)
@@ -640,9 +643,7 @@ class CoordinatorTask3(Node):
                         
                         self.move_head_outcome = False
                         self.move_head_in_progress = False
-
                         self.latest_aruco_frame = None
-                    
                         self.move_manip_in_progress = False
                         self.move_manip_outcome = False
                     
@@ -650,9 +651,10 @@ class CoordinatorTask3(Node):
                         
                 
             case State.NEXT_CUBE:
-                self.get_logger().info("--- State: NEXT_CUBE ---")
+                self.get_logger().debug("--- State: NEXT_CUBE ---")
 
                 if not self.move_head_in_progress and not self.move_head_outcome:
+                    self.get_logger().info("Centering head for next cube...")
                     self.call_move_head_srv(pan=0.0, tilt=0.0)
                 elif self.move_head_in_progress and not self.move_head_outcome:
                     self.get_logger().info("Head movement in progress...")
@@ -675,10 +677,10 @@ class CoordinatorTask3(Node):
                         self.current_state = State.HOME
                         
             case State.HOME:
-                self.get_logger().info("--- State: HOME ---")
- 
-                self.get_logger().info("Returning home...")
+                self.get_logger().debug("--- State: HOME ---")
+                
                 if not self.nav_in_progress and not self.nav_outcome:
+                    self.get_logger().info("Returning home...")
                     self.call_send_nav_goal_srv(self.home_pose)
                 elif self.nav_in_progress and not self.nav_outcome:
                     self.get_logger().info("Navigation goal in progress...")
@@ -694,8 +696,7 @@ class CoordinatorTask3(Node):
         
             case State.DONE:
                 self.get_logger().info('Task 3 completed!')
-                # Optionally shutdown
-                # rclpy.shutdown()
+                rclpy.shutdown()
                 
                 
     #################################
