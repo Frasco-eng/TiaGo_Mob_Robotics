@@ -5,12 +5,16 @@
 ##################################
 import rclpy
 import time
+import math
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import PoseStamped
+
+from geometry_msgs.msg import Twist
+from std_srvs.srv import Trigger
 
 # Custom service
 from exam_interfaces.srv import StartNavigation
@@ -23,15 +27,20 @@ class MapNavigatorService(Node):
         super().__init__('map_navigator_service')
         self.cb_group = ReentrantCallbackGroup()
         
+        self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+        
         ##################################
         # Service Server
         ##################################
         self.srv = self.create_service(StartNavigation, 'start_nav_srv', self.handle_navigation, callback_group=self.cb_group)
         
+        self.rotate_srv = self.create_service(Trigger, 'rotate_360', self.handle_rotate_360, callback_group=self.cb_group)
+        
         ##################################
         # Action Client
         ##################################
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose', callback_group=self.cb_group)
+        
 
     ##################################
     # Callback
@@ -96,6 +105,47 @@ class MapNavigatorService(Node):
         else:
             response.success = False
             
+        return response
+    
+    
+    def handle_rotate_360(self, request, response):
+        """
+        Rotates the robot 360 degrees using open-loop velocity commands.
+        """
+        self.get_logger().info("Request received: Starting 360 rotation...")
+
+        # Configuration
+        angular_speed = 0.5  # rad/s
+        # Calculate duration: Full circle (2*PI) / speed
+        target_duration = (2 * math.pi) / angular_speed
+        # Add a small buffer to ensure full coverage
+        target_duration += 0.5 
+
+        # Create velocity message
+        vel_msg = Twist()
+        vel_msg.linear.x = 0.0
+        vel_msg.angular.z = angular_speed
+
+        start_time = time.time()
+        
+        # Loop to publish velocity commands
+        while (time.time() - start_time) < target_duration:
+            # Check if ROS is still active
+            if not rclpy.ok():
+                response.success = False
+                response.message = "Aborted: ROS shutdown"
+                return response
+
+            self.cmd_vel_pub.publish(vel_msg)
+            time.sleep(0.1) # 10Hz publish rate
+
+        # Stop the robot after rotation
+        vel_msg.angular.z = 0.0
+        self.cmd_vel_pub.publish(vel_msg)
+
+        self.get_logger().info("Rotation complete.")
+        response.success = True
+        response.message = "360 Rotation Completed"
         return response
 
 ##################################

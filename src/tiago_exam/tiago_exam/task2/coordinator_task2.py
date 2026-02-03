@@ -13,6 +13,8 @@ from geometry_msgs.msg import PoseStamped
 from exam_interfaces.srv import StartNavigation, MoveHead, InitGoals, GetNextGoal, SaveMarker
 from exam_interfaces.msg import HeadPose
 
+from std_srvs.srv import Trigger
+
 # Python Libraries
 import time
 from threading import Thread
@@ -25,10 +27,11 @@ import math
 class State(Enum):
     INIT = 0            # Initial State
     EXPLORING = 1       # Exploring the environment
-    TRACKING = 2        # Tracking a detected marker
-    INSPECTING = 3      # Inspecting the marker
-    HOMING = 4          # Returning to home position
-    DONE = 5            # Finished task 2
+    ROTATING = 2       # Rotating to scan for markers
+    TRACKING = 3        # Tracking a detected marker
+    INSPECTING = 4      # Inspecting the marker
+    HOMING = 5          # Returning to home position
+    DONE = 6            # Finished task 2
 
 ##################################
 # Coordinator Node
@@ -55,6 +58,8 @@ class CoordinatorTask2(Node):
         
         self.nav_in_progress = False
         self.nav_outcome = False
+        self.rotate_in_progress = False
+        self.rotate_outcome = False
         
         self.home_pose = PoseStamped()
         self.home_pose.header.frame_id = 'map'
@@ -77,6 +82,7 @@ class CoordinatorTask2(Node):
         self.init_goals_client = self.create_client(InitGoals, 'init_goals', callback_group=self.callback_group)
         self.get_next_goal_client = self.create_client(GetNextGoal, 'get_next_goal', callback_group=self.callback_group)
         self.save_marker_client = self.create_client(SaveMarker, 'save_marker_srv', callback_group=self.callback_group)
+        self.rotate_client = self.create_client(Trigger, 'rotate_360', callback_group=self.callback_group)
         
         ##################################
         # Subscribers
@@ -154,6 +160,20 @@ class CoordinatorTask2(Node):
     def head_pose_callback(self, msg: HeadPose) -> None:
         self.pan = msg.pan
         self.tilt = msg.tilt
+        
+    def rotate_response_callback(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info("Rotation completed successfully.")
+                self.rotate_outcome = True
+            else:
+                self.get_logger().warn("Rotation failed.")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
+        finally:
+            self.rotate_in_progress = False
+            
 
     ##################################
     # Methods
@@ -253,6 +273,22 @@ class CoordinatorTask2(Node):
         
         save_future.add_done_callback(self.save_marker_callback)
         
+    def call_rotate_360_srv(self):
+        """
+        Calls the rotate 360 service.
+        """
+        if not self.rotate_client.service_is_ready():
+            self.get_logger().warn("Rotate360 service not ready!")
+            return
+
+        rotate_req = Trigger.Request()
+        
+        self.rotate_in_progress = True
+        self.rotate_outcome = False
+
+        rotate_future = self.rotate_client.call_async(rotate_req)
+        
+        rotate_future.add_done_callback(self.rotate_response_callback)
         
     ##################################
     # STATE MACHINE
@@ -325,8 +361,39 @@ class CoordinatorTask2(Node):
                         # Reset flag for next goal
                         self.nav_outcome = False
                         self.nav_in_progress = False
-
-                   
+                        
+                        self.state = State.ROTATING  # Continue exploring
+                        self.rotation_steps = 0
+                
+                # --- ROTATING ---
+                case State.ROTATING:
+                    self.get_logger().info("--- State: ROTATING ---")
+                    
+                    # 1. Start Rotation
+                    if not self.rotate_in_progress and not self.rotate_outcome:
+                        self.get_logger().info("Starting 360-degree rotation...")
+                        self.call_rotate_360_srv()
+                    
+                    # 2. Wait for Rotation
+                    elif self.rotate_in_progress and not self.rotate_outcome:
+                        # Note: Even if we detect a marker here, we can't stop the service 
+                        # because it's running in the other node. We just wait.
+                        time.sleep(0.5)
+                        continue
+                    
+                    # 3. Rotation Finished
+                    else:
+                        self.get_logger().info("Rotation completed.")
+                        self.rotate_outcome = False
+                        self.rotate_in_progress = False
+                        
+                        # Check if a marker was found DURING the rotation
+                        if self.is_new_marker_detected:
+                            self.get_logger().info("Marker detected during rotation! Switching to TRACKING.")
+                            self.state = State.TRACKING
+                            self.is_new_marker_detected = False
+                        else:
+                            self.state = State.EXPLORING
                                                     
                 # --- TRACKING  ---
                 case State.TRACKING:
