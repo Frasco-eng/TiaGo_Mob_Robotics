@@ -16,6 +16,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SaveMarker.srv"
   "srv/GetNextGoal.srv"
   "srv/InitGoals.srv"
+  "srv/SetCollisionObject.srv"
   "msg/HeadPose.msg"
   DEPENDENCIES geometry_msgs
 )

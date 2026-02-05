@@ -12,11 +12,17 @@ from pymoveit2 import MoveIt2
 from pymoveit2 import GripperInterface
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from linkattacher_msgs.srv import AttachLink, DetachLink
+from moveit_msgs.msg import CollisionObject
+from shape_msgs.msg import SolidPrimitive
+from sensor_msgs.msg import JointState
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from geometry_msgs.msg import TransformStamped
-from tf2_ros import TransformBroadcaster
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
+from tf2_ros.transform_broadcaster import TransformBroadcaster
 
 # Custom Service
-from tiago_exam_interfaces.srv import ManipulatorCommand
+from tiago_exam_interfaces.srv import ManipulatorCommand, SetCollisionObject
 
 
 # Python Libraries
@@ -57,8 +63,7 @@ JOINT_ARM_NAMES = [
     "arm_4_joint",
     "arm_5_joint",
     "arm_6_joint",
-    "arm_7_joint",
-    "arm_tool_joint",
+    "arm_7_joint"
 ]
 
 JOINT_GRIPPER_NAMES = [
@@ -95,6 +100,7 @@ class Manipulator(Node):
         ##################################
         # Manipulator Interfaces
         ##################################
+        self.map_frame_name = "map"
         self.robot_base_frame = "base_link"
         self.target_frame_name = "aruco_marker_target_frame"
         
@@ -107,43 +113,19 @@ class Manipulator(Node):
             group_name="arm_torso",
             callback_group=self.callback_group_arm,
         )
-
-        # Bidirectional RRT
-        self.arm.planner_id = "RRTConnectkConfigDefault"
-
-        # Add collision objects
-        self.arm.add_collision_box(id="10",
-                                        position=[-3.0, -4.0, 0.15],
-                                        quat_xyzw=[0.0, 0.0, -0.7071, 0.7071],
-                                        size=[0.5, 0.5, 0.3])
-        
-        self.arm.add_collision_box(id="11",
-                                        position=[0.0, -7, 0.15],
-                                        quat_xyzw=[0.0, 0.0, -0.7071434, 0.7070701],
-                                        size=[0.5, 0.5, 0.3])    
+        self.arm.planner_id = "RRTConnectkConfigDefault"  
 
         # Gripper Interface
         self.gripper = GripperInterface(
         node=self,
         gripper_joint_names=JOINT_GRIPPER_NAMES,
         open_gripper_joint_positions=OPEN_GRIPPER_JOINT_POSITIONS,
-        closed_gripper_joint_positions=CLOSED_GRIPPER_JOINT_POSITIONS,
+        closed_gripper_joint_positions=FULLY_CLOSED_GRIPPER_JOINT_POSITIONS,
         gripper_group_name=GRIPPER_GROUP_NAME,
         callback_group=self.callback_group_gripper,
-        gripper_command_action_name=GRIPPER_COMMAND_ACTION_NAME,
-        max_effort=100.0
+        gripper_command_action_name=GRIPPER_COMMAND_ACTION_NAME
         )
-
-        # Add collision objects
-        self.gripper.add_collision_box(id='12',
-                                            position=[-3.0, -4.0, 0.15],
-                                            quat_xyzw=[0.0, 0.0, -0.7071, 0.7071],
-                                            size=[0.5, 0.5, 0.3])
-        
-        self.gripper.add_collision_box(id='13',
-                                            position=[0.0, -7, 0.15],
-                                            quat_xyzw=[0.0, 0.0, -0.7071434, 0.7070701],
-                                            size=[0.5, 0.5, 0.3]) 
+        self.gripper.planner_id = "RRTConnectkConfigDefault"
 
         ##################################
         # Velocity and Acceleration Limits
@@ -152,13 +134,7 @@ class Manipulator(Node):
         self.arm.max_acceleration = 0.5
         self.gripper.max_velocity = 1.0
         self.gripper.max_acceleration = 1.0
-        self.safe_joints_position = [0.0, 0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00, 0.04]
-
-        ##################################
-        # FT Sensor Variables
-        ##################################
-        self.current_force = 0.0
-        self.force_threshold = 1.0  # Newtons
+        self.safe_joints_position = [0.0, 0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00]
    
         ##################################
         # State Variables
@@ -171,38 +147,43 @@ class Manipulator(Node):
         self.marker_id = None               # ID of the marker to manipulate
         self.attach_future = None           # Future for attach service
         self.detach_future = None           # Future for detach service
+        self.latest_joint_state = None      # Latest JointState message
+
         ##################################
         # Service Server
         ##################################
-        self.srv = self.create_service(
-            ManipulatorCommand, 
-            'manipulator_command_srv', 
-            self.handle_manipulator_command, 
-            callback_group=self.callback_group_service
+        self.srv = self.create_service(ManipulatorCommand, 'manipulator_command_srv', self.handle_manipulator_command, callback_group=self.callback_group_service)
+        self.collision_srv = self.create_service(SetCollisionObject, 'set_collision_object_srv', self.handle_collision_request, callback_group=self.callback_group_service)
+
+        ##################################
+        # Subscribers
+        ##################################
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
         )
+        self.joint_state_sub = self.create_subscription(JointState, '/joint_states', self.joint_state_callback, callback_group=self.callback_group_service, qos_profile=qos_profile)
 
         ##################################
         # Services Clients
         ##################################
-        self.attach_client = self.create_client(AttachLink, 'ATTACHLINK')
-        self.detach_client = self.create_client(DetachLink, 'DETACHLINK')
-        
+        self.attach_client = self.create_client(AttachLink, 'ATTACHLINK', callback_group=self.callback_group_service)
+        self.detach_client = self.create_client(DetachLink, 'DETACHLINK', callback_group=self.callback_group_service)
+
         ##################################
-        # Subscibers
+        # TF Setup
         ##################################
-        qos_profile = rclpy.qos.QoSProfile(depth=10, durability=rclpy.qos.QoSDurabilityPolicy.TRANSIENT_LOCAL)
-        self.ft_sub = self.create_subscription(WrenchStamped, '/ft_sensor_controller/wrench', self.ft_callback, qos_profile, callback_group=self.callback_group_service)
+        self.tf_buffer = Buffer()                                       # TF Buffer
+        self.tf_listener = TransformListener(self.tf_buffer, self)      # TF Listener
+        self.tf_broadcaster = TransformBroadcaster(self)                # Dyanmic TF Broadcaster
 
         self.get_logger().info(f"Manipulator Node Ready.")
 
     ##################################
     # Callbacks
     ##################################
-    def ft_callback(self, msg: WrenchStamped):
-        force = msg.wrench.force
-        self.current_force = np.sqrt(force.x**2 + force.y**2)
-        #self.get_logger().info(f"Current Force: x{force.x:.2f} N, y{force.y:.2f} N, z{force.z:.2f} N | Magnitude (y,z): {self.current_force:.2f} N")
-
     def handle_manipulator_command(self, request, response):
         self.get_logger().info(f"Received Manipulator Command: {request.type}")
         self.base_T_marker =  self.transform_stamped_to_kdl(request.frame)
@@ -246,9 +227,62 @@ class Manipulator(Node):
         self.get_logger().info(f"Command {request.type} completed with success: {self.task_success}")
         return response
     
-    def move_to_joints(self, joint_positions: list) -> bool:
+    def handle_collision_request(self, request, response):
+        if request.command == "ADD":
+            self.get_logger().info(f"Adding collision object: {request.object_id}")
+            self.arm.add_collision_box(
+                id=request.object_id,
+                position=request.position,
+                quat_xyzw=request.quat_xyzw,
+                size=request.size
+            )
+            self.get_logger().info(f"Collision object {request.object_id} added.")
+            response.success = True
+        elif request.command == "REMOVE":
+            self.get_logger().info(f"Removing collision object: {request.object_id}")
+            self.arm.remove_collision_object(id=request.object_id)
+            self.get_logger().info(f"Collision object {request.object_id} removed.")
+            response.success = True
+        else:
+            self.get_logger().error(f"Unknown command: {request.command}")
+            response.success = False
+        return response
+    
+    def joint_state_callback(self, msg: JointState):
+        self.latest_joint_state = msg
+
+    def get_joint_position(self, joint_name: str) -> float:
+        current_msg = self.latest_joint_state
+        if current_msg is None:
+            self.get_logger().warning("No JointState message received yet.")
+            return None
+        
+        try: 
+            index = current_msg.name.index(joint_name)
+            return current_msg.position[index]
+        except ValueError:
+            self.get_logger().error(f"Joint name {joint_name} not found in JointState message.")
+            return None
+
+    def move_to_safe(self) -> bool:
+        safe_torso = self.safe_joints_position[0]
+        current_torso = self.get_joint_position("torso_lift_joint")
+        joint_pos = copy.deepcopy(self.safe_joints_position)
+
+        # Only move arm first
+        joint_pos[0] = current_torso
         for i in range(10):
-            self.arm.move_to_configuration(joint_positions)
+            self.arm.move_to_configuration(joint_pos)
+            success = self.arm.wait_until_executed()
+            if success:
+                break
+            else:
+                self.get_logger().warning(f"Attempt {i+1}/10: Failed to reach joint positions, retrying...")
+        
+        # Move torso last
+        joint_pos[0] = safe_torso
+        for i in range(10):
+            self.arm.move_to_configuration(joint_pos)
             success = self.arm.wait_until_executed()
             if success:
                 break
@@ -278,7 +312,29 @@ class Manipulator(Node):
         if i == 9 and not success:
             self.get_logger().error("Exceeded maximum attempts to reach pose.")     
         return success
-     
+    
+    def publish_tf(self, frame_name: str,pose_to_publish: PoseStamped) -> None:
+        '''
+        Publish a TF frame for the target cube based on the given pose.
+        
+        Parameters
+        ----------
+        frame_name : str
+            The name of the TF frame to publish (e.g., "target_cube_frame").
+        pose_to_publish : PoseStamped
+            The pose of the target cube to publish as a TF frame.
+        '''
+
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'base_link'
+        t.child_frame_id = frame_name
+        t.transform.translation.x = pose_to_publish.pose.position.x
+        t.transform.translation.y = pose_to_publish.pose.position.y
+        t.transform.translation.z = pose_to_publish.pose.position.z
+        t.transform.rotation = pose_to_publish.pose.orientation
+        self.tf_broadcaster.sendTransform(t)
+
     ##################################
     # STATE MACHINE
     ##################################
@@ -290,7 +346,6 @@ class Manipulator(Node):
                 
                 case State.MOVE_TO_PRE_GRASP:
                     self.get_logger().info("--- State: MOVE_TO_PRE_GRASP ---")
-
                     
                     # Compute pre-grasp pose                    
                     self.base_T_marker.M = self.base_T_marker.M * kdl.Rotation.RotY(np.pi/2)
@@ -299,15 +354,17 @@ class Manipulator(Node):
                     base_T_approach = self.base_T_marker * approach_twist
                     
                     pre_grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
+
+                    self.publish_tf("pre_grasp_frame", pre_grasp_pose)
                          
                     if self.call_move_arm_srv(pre_grasp_pose):
                         # Open gripper
+                        self.get_logger().info("Opening gripper...")
                         self.gripper.open()
                         self.gripper.wait_until_executed()
+                        self.get_logger().info("Gripper opened.")
                                       
                         self.current_state = State.MOVE_TO_GRASP
-                        
-
                     else:
                         self.get_logger().error("Failed to reach Pre-Grasp")
                         self.task_success = False
@@ -322,7 +379,6 @@ class Manipulator(Node):
 
                     grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
 
-                    
                     if self.call_move_arm_srv(grasp_pose, cartesian=True):
                         self.current_state = State.GRASP
                     else:
@@ -333,14 +389,15 @@ class Manipulator(Node):
                 
                 case State.GRASP:
                     self.get_logger().info("--- State: GRASP ---")
-                    self.gripper.closed_gripper_joint_positions = FULLY_CLOSED_GRIPPER_JOINT_POSITIONS
+
                     # Close gripper
-                    self.gripper.close()
+                    self.get_logger().info("Closing gripper on object...")
+                    self.gripper.move_to_position(CLOSED_GRIPPER_JOINT_POSITIONS[0])
                     self.gripper.wait_until_executed()
-                    self.gripper.closed_gripper_joint_positions = CLOSED_GRIPPER_JOINT_POSITIONS
+                    self.get_logger().info("Gripper closed on object.")
+
                     time.sleep(1.0)  # Wait for gripper to close
                     
-
                     self.current_state = State.ATTACH
                 
                 case State.ATTACH:
@@ -356,7 +413,7 @@ class Manipulator(Node):
                         attach_request = AttachLink.Request()
                         
                         attach_request.model1_name = "tiago"
-                        attach_request.link1_name = "gripper_left_finger_link"
+                        attach_request.link1_name = "gripper_right_finger_link"
                         attach_request.model2_name = "aruco_cube_exam_id" + str(self.marker_id)
                         attach_request.link2_name = "link"
                         
@@ -382,6 +439,8 @@ class Manipulator(Node):
 
                     post_grasp_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
 
+                    self.publish_tf("post_grasp_frame", post_grasp_pose)
+
                     if self.call_move_arm_srv(post_grasp_pose, cartesian=True):
                         self.get_logger().info("Reached Post-Grasp Pose")
                         self.current_state = State.MOVE_TO_SAFE
@@ -395,7 +454,7 @@ class Manipulator(Node):
                 case State.MOVE_TO_SAFE:
                     self.get_logger().info("--- State: MOVE_TO_SAFE ---")
 
-                    if self.move_to_joints(self.safe_joints_position):
+                    if self.move_to_safe():
                         self.get_logger().info("Reached Safe joints")
                         self.task_success = True
                         self.current_state = State.IDLE
@@ -405,7 +464,6 @@ class Manipulator(Node):
                         self.task_success = False
                         self.current_state = State.IDLE
                         self.task_finished_event.set()
-
                
                 case State.MOVE_TO_PRE_PLACE:
                     
@@ -416,7 +474,8 @@ class Manipulator(Node):
                     pre_place_twist = kdl.Frame(kdl.Rotation.Identity(), kdl.Vector(-0.4, 0.0, 0.0))
                     base_T_pre_place = self.base_T_marker * pre_place_twist
                     pre_place_pose = self.kdl_to_pose_msg(base_T_pre_place, self.robot_base_frame)
-                    
+
+                    self.publish_tf("pre_place_frame", pre_place_pose)                    
                     
                     if self.call_move_arm_srv(pre_place_pose):
                         self.current_state = State.MOVE_TO_PLACE
@@ -453,29 +512,26 @@ class Manipulator(Node):
                     self.current_state = State.DETACH
                     
                 case State.DETACH:
-                    
+                    self.get_logger().info("--- State: DETACH ---")
                     if self.detach_future is None:
                         self.get_logger().info("Preparing to detach object from gripper...")
-                        self.detach_future = self.detach_client.call_async(DetachLink.Request())
 
-                    
                         # Detach the object from the gripper
                         detach_request = DetachLink.Request()
                         detach_request.model1_name = "tiago"
-                        detach_request.link1_name = "gripper_left_finger_link"
+                        detach_request.link1_name = "gripper_right_finger_link"
                         detach_request.model2_name = "aruco_cube_exam_id" + str(self.marker_id)
                         detach_request.link2_name = "link"
-                        self.get_logger().info("aruco_cube_exam_id_" + str(self.marker_id))
+                        self.get_logger().info(f"Detaching: {detach_request.model2_name}")
                         self.detach_future = self.detach_client.call_async(detach_request)
                     
-                    self.get_logger().info("--- State: DETACH ---")
+                    
                     if self.detach_future is not None and self.detach_future.done():
                         detach_response = self.detach_future.result()
                         if detach_response.success:
                             self.get_logger().info("Object successfully detached from gripper.")
-                            # Open gripper
-                            self.gripper.close()
-                            self.gripper.wait_until_executed()
+
+                            
                             self.current_state = State.POST_PLACE
                             self.detach_future = None  # Reset future for next use
                         else:
@@ -492,8 +548,17 @@ class Manipulator(Node):
 
                     post_place_pose = self.kdl_to_pose_msg(base_T_approach, self.robot_base_frame)
 
+                    self.publish_tf("post_place_frame", post_place_pose)
+
                     if self.call_move_arm_srv(post_place_pose, cartesian=True):
                         self.get_logger().info("Reached Post-Place Pose")
+
+                        # Close gripper
+                        self.get_logger().info("Closing gripper...")
+                        self.gripper.close()
+                        self.gripper.wait_until_executed()
+                        self.get_logger().info("Gripper closed.")
+                         
                         self.current_state = State.MOVE_TO_SAFE
                     else:
                         self.get_logger().error("Failed to reach Post-Place Pose")

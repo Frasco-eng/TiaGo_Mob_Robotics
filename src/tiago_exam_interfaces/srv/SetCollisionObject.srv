@@ -1,0 +1,7 @@
+string command
+string object_id
+float64[] position
+float64[] quat_xyzw
+float64[] size
+---
+bool success

@@ -3,6 +3,7 @@
 ##################################
 # Imports
 ##################################
+import math
 import rclpy
 from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -14,11 +15,13 @@ from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 from tf2_ros.transform_broadcaster import TransformBroadcaster
 from tf2_geometry_msgs import do_transform_pose
 from rclpy.executors import MultiThreadedExecutor
+from geometry_msgs.msg import Twist
+
 import PyKDL as kdl
 
 from functools import partial
 # Custom Services
-from tiago_exam_interfaces.srv import StartNavigation, MoveHead, ManipulatorCommand
+from tiago_exam_interfaces.srv import StartNavigation, MoveHead, ManipulatorCommand, SetCollisionObject
 
 # Python Libraries
 from enum import Enum
@@ -129,6 +132,25 @@ class CoordinatorTask3(Node):
         self.move_manip_outcome = False
         
         self.target_cube_pose = None
+
+        # Distance from table logic variables
+        self.ref_distance_to_table = None
+        self.approach_threshold = 0.01
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.pick_marker_frame = "target_aruco_pick_marker_frame"
+        self.place_marker_frame = "target_aruco_place_marker_frame"
+        self.world_pick_surface = {
+            'x': -3.0, 'y': -2.7, 'z': 0.15,
+            'qx': 0.0, 'qy': 0.0, 'qz': -0.7071, 'qw': 0.7071,
+            'size': [1.0, 0.5, 0.3] # x, y, z dal box
+        }
+
+        self.world_place_surface = {
+            'x': 0.0, 'y': -5.7, 'z': 0.15,
+            'qx': 0.0, 'qy': 0.0, 'qz': -0.7071, 'qw': 0.7071,
+            'size': [1.0, 0.5, 0.3]
+        }
+        
         
         self.latest_camera_T_marker: Optional[kdl.Frame] = None
         self.latest_aruco_frame: Optional[TransformStamped] = None
@@ -180,7 +202,7 @@ class CoordinatorTask3(Node):
         self.nav_client = self.create_client(StartNavigation, 'start_nav_srv', callback_group=self.callback_group)
         self.head_client = self.create_client(MoveHead, 'move_head_srv', callback_group=self.callback_group)
         self.manip_client = self.create_client(ManipulatorCommand, 'manipulator_command_srv', callback_group=self.callback_group)
-        
+        self.collision_client = self.create_client(SetCollisionObject, 'set_collision_object_srv', callback_group=self.callback_group)
 
         ##################################
         # Subscriber
@@ -285,6 +307,24 @@ class CoordinatorTask3(Node):
                 self.get_logger().warn("Manipulator command failed.")
         except Exception as e:
             self.get_logger().error(f"Service call failed: {e}")
+    
+    def collision_response_callback(self, future) -> None:
+        '''
+        Callback function for collision object service response.
+
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
+        '''
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info("Collision object operation executed successfully.")
+            else:
+                self.get_logger().warn("Collision object operation failed.")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
              
     ##################################
     # Call
@@ -352,7 +392,34 @@ class CoordinatorTask3(Node):
         self.move_manip_outcome = False
 
         manip_future.add_done_callback(self.move_manip_response_callback)
-        
+    
+    def call_send_collision_object_srv(self, operation: str, object_id: str, position: List[float] = None, quat_xyzw: List[float] = None, size: List[float] = None) -> None:
+        '''
+        Call the set collision object service to add or remove a collision object.
+
+        Parameters
+        ----------
+        operation : str
+            The operation to perform ('ADD' or 'REMOVE').
+        object_id : str
+            The ID of the collision object.
+        position : List[float]
+            The position of the collision object [x, y, z].
+        quat_xyzw : List[float]
+            The orientation of the collision object as a quaternion [x, y, z, w].
+        size : List[float]
+            The size of the collision object [x, y, z].
+        '''
+        req = SetCollisionObject.Request()
+        req.command = operation
+        req.object_id = object_id
+        req.position = position if position is not None else [0.0, 0.0, 0.0]
+        req.quat_xyzw = quat_xyzw if quat_xyzw is not None else [0.0, 0.0, 0.0, 1.0]
+        req.size = size if size is not None else [0.0, 0.0, 0.0]
+
+        collision_future = self.collision_client.call_async(req)
+
+        collision_future.add_done_callback(self.collision_response_callback)
 
     def timer_callback(self):
         '''
@@ -394,14 +461,26 @@ class CoordinatorTask3(Node):
                     elif 'target_aruco_place_marker_frame' in row['name']:
                         self.place_loc = (x, y)
                         self.place_orientation = q
+                    
+                    # Broadcast static TF
+                    t = TransformStamped()
+                    t.header.stamp = self.get_clock().now().to_msg()
+                    t.header.frame_id = 'map'
+                    t.child_frame_id = row['name']
+                    
+                    t.transform.translation.x = x
+                    t.transform.translation.y = y
+                    t.transform.translation.z = z
+                    t.transform.rotation = q
+                    
+                    self.tf_static_broadcaster.sendTransform(t)
             
             self.get_logger().info('Station locations loaded successfully from CSV.')
-                    
+    
         except Exception as e:
             self.get_logger().error(f'Failed to load station locations: {e}')
     
     def save_home_pose(self):
-
         self.home_pose = PoseStamped()
         self.home_pose.header.stamp = self.get_clock().now().to_msg()
         self.home_pose.header.frame_id = 'map'
@@ -505,6 +584,109 @@ class CoordinatorTask3(Node):
             goal.pose.orientation = self.place_orientation
 
         return goal
+    
+    def get_distance_from_base(self, target_frame_id: str) -> Optional[float]:
+        """
+        Calculate the Euclidean distance (only XY) between base_link and the target frame.
+        """
+        try:
+            # Look up the transform: base_link -> target_frame
+            t = self.tf_buffer.lookup_transform(
+                self.base_link_frame_name,
+                target_frame_id,
+                rclpy.time.Time()
+            )
+            
+            dx = t.transform.translation.x
+            dy = t.transform.translation.y
+            
+            # Euclidean distance in the ground plane
+            dist = math.sqrt(dx**2 + dy**2)
+            return dist
+        except Exception as e:
+            self.get_logger().warn(f"Impossible to compute distance from base to {target_frame_id}: {e}")
+            return None
+        
+    def generate_collision_object(self, command: str, object_id: str) -> None:
+        table_pose = PoseStamped()
+        table_pose.header.frame_id = "base_link"
+        table_pose.header.stamp = self.get_clock().now().to_msg()
+
+        # table_width = 1.0
+        # table_depth = 0.5
+        # table_height = 0.3
+
+
+        # position = [self.ref_distance_to_table + (table_depth),
+        #             0.0,
+        #             table_height / 2]
+
+        # quat_xyzw = [0.0,
+        #              0.0,
+        #              0.0,
+        #              1.0]
+
+        # table_size = [table_depth,
+        #               table_width,
+        #               table_height]
+
+        # 1. Seleziona i dati corretti dal dizionario
+        if 'pick' in object_id:
+            data = self.world_pick_surface
+            obj_id = "pick_table"
+        elif 'place' in object_id:
+            data = self.world_place_surface
+            obj_id = "place_table"
+        else:
+            self.get_logger().error(f"Unknown table type: {object_id}")
+            return
+
+        # 2. Crea la PoseStamped nel frame MAP (World)
+        map_pose = PoseStamped()
+        map_pose.header.frame_id = "map"
+        map_pose.header.stamp = self.get_clock().now().to_msg()
+        
+        map_pose.pose.position.x = data['x']
+        map_pose.pose.position.y = data['y']
+        map_pose.pose.position.z = data['z']
+        map_pose.pose.orientation.x = data['qx']
+        map_pose.pose.orientation.y = data['qy']
+        map_pose.pose.orientation.z = data['qz']
+        map_pose.pose.orientation.w = data['qw']
+
+        # 3. TRASFORMAZIONE: Da Map -> Base_Link
+        try:
+            # Cerchiamo la trasformazione inversa: dove è il punto della mappa rispetto a me?
+            # Target: base_link, Source: map
+            transform = self.tf_buffer.lookup_transform(
+                "base_link",
+                "map",
+                rclpy.time.Time()) # Ultima disponibile
+            
+            # Applichiamo la matematica della trasformazione
+            base_link_pose = do_transform_pose(map_pose.pose, transform)
+            
+        except Exception as e:
+            self.get_logger().error(f"Failed to transform table pose from map to base_link: {e}")
+            return
+        
+        # 4. Prepara i dati per il servizio
+        # Nota: ora usiamo le coordinate TRASFORMATE
+        position = [base_link_pose.position.x,
+                    base_link_pose.position.y,
+                    base_link_pose.position.z]
+
+        quat_xyzw = [base_link_pose.orientation.x,
+                     base_link_pose.orientation.y,
+                     base_link_pose.orientation.z,
+                     base_link_pose.orientation.w]
+        
+        table_size = data['size']
+
+        self.call_send_collision_object_srv(command, object_id, position, quat_xyzw, table_size)
+    
+    def remove_collision_object(self, object_id: str) -> None:
+        self.call_send_collision_object_srv("REMOVE", object_id)
         
     ##################################
     # STATE MACHINE
@@ -578,6 +760,35 @@ class CoordinatorTask3(Node):
                         self.current_state = State.HOME
             
                 case State.PICK:
+                    
+                    # --- MODIFICA 2: Lettura e Salvataggio Distanza ---
+                    # Lo facciamo solo una volta all'inizio dello stato PICK
+                    if self.ref_distance_to_table is None:
+                        # Leggiamo la distanza reale tra robot e tavolo di pick
+                        dist = self.get_distance_from_base(self.pick_marker_frame)
+                        
+                        if dist is not None:
+                            self.ref_distance_to_table = dist
+                            self.get_logger().info(f"REFERENCE DISTANCE SAVED: {self.ref_distance_to_table:.3f} meters")
+                            
+                            # OPZIONALE: Manda comando al manipulator per aggiungere collision object
+                            
+                            
+                            # Invia comando per AGGIUNGERE il collision object
+                            # self.call_send_manip_goal_srv(type_cmd="ADD_COLLISION_TABLE", frame=collision_frame)
+                        else:
+                            self.get_logger().warn("Could not read distance! Using default.")
+                            self.ref_distance_to_table = 0.14 # Default di sicurezza
+
+
+
+                        self.generate_collision_object("ADD", "pick_table")
+
+
+
+
+
+
                     self.get_logger().debug("--- State: PICK ---")
                     
                     if not self.move_head_in_progress and not self.move_head_outcome:
@@ -632,6 +843,7 @@ class CoordinatorTask3(Node):
                             
                         else:
                             self.get_logger().info("Pick operation completed.")
+                            self.remove_collision_object("pick_table")
                             
                             self.move_head_outcome = False
                             self.move_head_in_progress = False
@@ -668,13 +880,38 @@ class CoordinatorTask3(Node):
                                 time.sleep(self.debug_period)
                                     
                             else: 
-                                self.get_logger().info("Arrived at Place Station.")
-                                self.current_state = State.PLACE
+                                self.get_logger().info("Arrived at Place Station, checking distance...")
+                                current_dist = self.get_distance_from_base(self.place_marker_frame)
+                                if current_dist is not None and self.ref_distance_to_table is not None:
+                                    diff = abs(current_dist - self.ref_distance_to_table)
+                                    if diff > self.approach_threshold:
+                                        self.get_logger().info(f"Too far! Diff: {diff:.3f}m. Approaching...")
+                                        
+                                        # Comando di velocità lineare X (avanti piano)
+                                        cmd = Twist()
+                                        cmd.linear.x = 0.01 # 1 cm/s
+                                        self.cmd_vel_pub.publish(cmd)
+                                    else:
+                                        # Siamo alla distanza giusta (o troppo vicini, nel dubbio ci fermiamo)
+                                        self.get_logger().info(f"Target distance reached (Error: {diff:.3f}m). Stopping.")
+                                        
+                                        # Stop robot
+                                        stop_cmd = Twist()
+                                        self.cmd_vel_pub.publish(stop_cmd)
+                                        
+                                        # Passa allo stato successivo
+                                        self.current_state = State.PLACE
+                                        # Resetta flag
+                                        self.nav_outcome = False
+                                        self.nav_in_progress = False
+                                else:
+                                    self.get_logger().warn("Could not read distance! Going to PLACE state anyway.")
+                                    self.current_state = State.PLACE
 
-                                self.nav_outcome = False
-                                self.nav_in_progress = False
-                                self.move_head_outcome = False
-                                self.move_head_in_progress = False
+                                    self.nav_outcome = False
+                                    self.nav_in_progress = False
+                                    self.move_head_outcome = False
+                                    self.move_head_in_progress = False
                             
                         else:
                             self.current_state = State.HOME
@@ -694,8 +931,11 @@ class CoordinatorTask3(Node):
                         if not self.move_manip_in_progress and not self.move_manip_outcome:
                             self.get_logger().info("Head positioned. Preparing for place...")
 
+                            self.generate_collision_object("ADD", "place_table")
+
                             # get x position of base_T_marker
-                            self.base_T_marker.p[0] = np.clip(self.base_T_marker.p[0] + 0.4, a_min=0.0, a_max=0.7)
+                            # TODO: questa è hardcode
+                            #self.base_T_marker.p[0] = np.clip(self.base_T_marker.p[0] + 0.4, a_min=0.0, a_max=0.7)
                             
                             # Define release pose based on grasp transform
                             release_frame = kdl.Frame(self.base_T_marker)
@@ -729,6 +969,8 @@ class CoordinatorTask3(Node):
                             self.latest_aruco_frame = None
                             self.move_manip_in_progress = False
                             self.move_manip_outcome = False
+
+                            self.remove_collision_object("place_table")
                         
                             self.current_state = State.NEXT_CUBE     
                             
@@ -750,6 +992,7 @@ class CoordinatorTask3(Node):
                     
                         # Increment cube index
                         self.current_cube_idx += 1
+                        self.ref_distance_to_table = None
                         if self.current_cube_idx < len(self.cubes_to_pick):
                             next_id = self.cubes_to_pick[self.current_cube_idx].marker_id
                             self.get_logger().info(f'Switching to next cube ID: {next_id}')
