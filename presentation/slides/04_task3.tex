@@ -76,8 +76,35 @@
 \begin{frame}{Task 3: Precise Placement Pose}
     The placement pose is chosen to be the same as the grasp pose to ensure that the cube is placed in approximately the same position as the one it was picked from. This is because the robot has to place the cube in a specific area of the table, and using the same pose for both picking and placing allows for a more consistent and accurate placement.
 
-
+    The grasp pose is saved and re-used for the placement phase, for this reason, an exact distance between the robot and the table is required to ensure a successful grasp and placement. 
+    
+    To achieve this, once the robot reaches the grasp pose in the map, it measures the distance to the table and record it. This distance is then used to adjust the robot's position during the placement phase. 
     \begin{alertblock}{Precise Approach Logic}
         To compensate for navigation errors, the node reads the real-time distance from the table. If the robot is wrongly positioned ($>1cm$ error), it triggers a closed-loop \textbf{Linear Approach/Backup} maneuver before attempting the grasp.
     \end{alertblock}
+\end{frame}
+
+\begin{frame}{Simulation Stability: Link Attacher}
+
+    Physics engines (Gazebo/ODE) struggle with friction simulation during mobile manipulation, causing objects to slip from the gripper during base motion.
+
+    \vspace{0.1cm}
+
+    \begin{block}{The Problem}
+        After modifing the gripper and object frictions and compliance properties, we tried to implement a force grasp strategy by subscribing to the gripper's FT Sensor data. The gripper would close until a the 10N threshold was reached in the specific axis.
+    \end{block}
+
+    \begin{block}{The Solution}
+        We integrated the \textbf{Link Attacher Plugin} to enforce a rigid kinematic link between the robot and the object during transport.
+    \end{block}
+
+    \vspace{0.2cm}
+    \textbf{Implementation Cycle:}
+    \begin{enumerate}
+        \item \textbf{Grasp:} Gripper closes physically on the object.
+        \item \textbf{Lock:} Call \texttt{/ATTACHLINK} service $\rightarrow$ Object becomes part of the robot's TF tree.
+        \item \textbf{Transport:} Robot navigates to the place station.
+        \item \textbf{Release:} Gripper opens $\rightarrow$ Call \texttt{/DETACHLINK} service $\rightarrow$ Physics are restored to the object.
+    \end{enumerate}
+
 \end{frame}

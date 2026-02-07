@@ -1,5 +1,5 @@
 # Fdb version 3
-["pdflatex"] 1770471210 "/home/giulio/tiago_gh_ws/presentation/main.tex" "main.pdf" "main" 1770471211
+["pdflatex"] 1770472502 "/home/giulio/tiago_gh_ws/presentation/main.tex" "main.pdf" "main" 1770472502
   "/etc/texmf/web2c/texmf.cnf" 1770136115 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/giulio/tiago_gh_ws/presentation/main.tex" 1770390017 8268 781547bfd024fb2b744b69e3e78f9a4b ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
@@ -222,14 +222,14 @@
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1770136600 165012 f177baa1c39a3ebd62c3096a43521a0d ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1770136716 1435909 ce0c64d4e41b0d620446fca48d456753 ""
   "Images//placeholder.png" 1770385984 26889 8b446c79dccfe2bcb5ca99c7d450ccc2 ""
-  "main.aux" 1770471211 5651 721936cfc832d5d754e882c3872aff5d "pdflatex"
-  "main.nav" 1770471211 2610 0d130f24a9362e84f7528ae9d85a4b70 "pdflatex"
+  "main.aux" 1770472502 5779 ada6b93ffd34083bc40402eaf7f3a573 "pdflatex"
+  "main.nav" 1770472502 2702 3db55b6393079c6913c886c26a1e0ddb "pdflatex"
   "main.tex" 1770390017 8268 781547bfd024fb2b744b69e3e78f9a4b ""
-  "main.toc" 1770471211 215 2f51e06ef9ccb78f52fd5c6b80be4a59 "pdflatex"
+  "main.toc" 1770472502 215 2f51e06ef9ccb78f52fd5c6b80be4a59 "pdflatex"
   "slides/01_introduction.tex" 1770391277 3480 5a426d8a37ebc5e228ac8d017220d55d ""
   "slides/02_task1.tex" 1770422191 3783 edff85d32cb795667e6c01ebe1d09e6b ""
   "slides/03_task2.tex" 1770470043 7729 3d4cafdab0e04312a04d41f0bd3dec83 ""
-  "slides/04_task3.tex" 1770471210 4387 1f55e8eeb9b08e0a1c6cfea050ba6add ""
+  "slides/04_task3.tex" 1770472501 6036 f19641c587045e4b10322b0e17263001 ""
   (generated)
   "main.aux"
   "main.log"
