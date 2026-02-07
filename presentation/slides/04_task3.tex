@@ -1,60 +1,83 @@
 % ==========================================
 % SECTION 4: TASK 3 - MANIPULATION
 % ==========================================
-\section{Task 3: Pick and Place}
+\section{Task 3: Manipulation}
 
-% --- Slide 1: High-Level Coordination ---
-\begin{frame}{Task 3: Coordination Strategy}
-    The \texttt{coordinator\_task3} node manages the full transport cycle.
-    \vspace{0.2cm}
-    \begin{itemize}
-        \item \textbf{Data Loading:} Loads exact Pick and Place locations saved in Task 2 from \texttt{marker\_locations.csv}.
-        \item \textbf{Sequence:} Enforces the mandatory order: Cube \textbf{63} followed by Cube \textbf{582}.
-        \item \textbf{Visual Feedback:} Publishes \texttt{target\_cube\_frame} to TF for real-time visualization in RViz.
-    \end{itemize}
+\begin{frame}{Task 3: Manipulation Coordination}
+
+    The \texttt{coordinator\_task3} node orchestrates the sequence, bridging the data gathered in Task 2 with the actuation logic.
+
+    \vspace{0.1cm}
+
+    \begin{block}{Execution Workflow}
+        \begin{enumerate}
+            \item \textbf{Data Ingestion:} Parses \texttt{marker\_locations.csv} to retrieve the exact pose of the targets found during exploration.
+            \item \textbf{State Sequence:} Enforces the required order of operations:
+            {
+                \small
+                $$ \text{Localize} \xrightarrow{\text{Navigate to Pick}} \text{Pick Cube ID 63} \xrightarrow{\text{Navigate to Place}} \text{Place Cube ID 63} $$
+                $$ \text{Next Target} \xrightarrow{\text{Navigate to Pick}} \text{Pick Cube ID 582} \xrightarrow{\text{Navigate to Place}} \text{Place Cube ID 582} $$
+            }
+            \item \textbf{Visual Feedback:} Publishes dynamic TF frames (\texttt{target\_cube\_frame}) to visualize the manipulation target in RViz in real-time.
+        \end{enumerate}
+    \end{block}
+
 \end{frame}
 
-% --- Slide 2: Manipulation Logic ---
-\begin{frame}[fragile]{Task 3: MoveIt2 Integration}
-    The \texttt{manipulator} node interfaces with MoveIt2 using the \texttt{RRTConnectkConfigDefault} planner.
-    \vspace{0.2cm}
+\begin{frame}{Task 3: Grasping \& Manipulation Strategy}
+
+    The manipulation pipeline implements a State Machine handling
     \begin{itemize}
-        \item \textbf{Collision Avoidance:} Added virtual collision boxes (IDs 10-13) to prevent the arm from hitting the floor or robot base.
-        \item \textbf{Safety:} Implemented a "Safe Joint Configuration" to retract the arm during navigation.
+        \item \textbf{Grasp Procedure:} \textit{Pre-Grasp} $\rightarrow$ \textit{Grasp} $\rightarrow$ \textit{Post-Grasp}.
+        \item \textbf{Release Procedure:} \textit{Pre-Release} $\rightarrow$ \textit{Release} $\rightarrow$ \textit{Post-Release}.
     \end{itemize}
-    \begin{lstlisting}[language=Python]
-# From manipulator.py
-self.safe_joints_position = [
-    0.0, 0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00
-]
-    \end{lstlisting}
+
+    Between this two main phases the robot perform navigation (handled by the coordinator and the navigation stack). To ensure a \textbf{safe} navigation the manipulator also perform additional phases.
+    \begin{itemize}
+        \item \textbf{Safe Pose:} Before navigating, the arm moves to a predefined "safe" configuration to avoid collisions with the environment during navigation.
+        \item \textbf{Idle:} After moving to the safe pose, the arm enters an idle state, waiting for the coordinator to signal the next command.
+    \end{itemize}
+    \vspace{0.2cm}
+
+
 \end{frame}
 
-% --- Slide 3: Grasping Mechanics ---
-\begin{frame}{Task 3: Robust Grasping (Gazebo)}
-    To ensure stability in the simulation (as suggested in the guidelines), we implemented the \textbf{Link Attacher} plugin logic.
-    \vspace{0.2cm}
-    \begin{itemize}
-        \item \textbf{Approach:} The arm moves to a "Pre-Grasp" pose defined by a $-0.4m$ offset along the X-axis of the marker.
-        \item \textbf{Attaching:} Once the gripper closes, we call the \texttt{/ATTACHLINK} service to rigidly bind the cube to the gripper link.
-    \end{itemize}
-    \begin{center}
-        \textit{This prevents the object from slipping during the robot's navigation phases.}
-    \end{center}
+\begin{frame}{Task 3: Grasp \& Release Selection Pose}
+    \begin{block}{Pose Calculation}
+        The Grasp Pose is computed by extracting the marker's transform. The choice of the grasping point has been made to ensure a stable grip on the cube, considering collinear and antipodal grasp for the 7cm cube.
+    \end{block}
+
+        \begin{columns}
+        \begin{column}{0.6\textwidth}
+            \begin{exampleblock}{Pose Computation (KDL)}
+                Given the marker pose $T_{base}^{marker}$, we compute the approach vector by applying a geometrical offset:
+                $$ T_{grasp} = T_{base}^{marker} \cdot T_{rotY(90^\circ)} \cdot T_{offset(-0.4m)} $$
+                This aligns the gripper normal with the cube's face.
+            \end{exampleblock}
+        \end{column}
+
+        \begin{column}{0.4\textwidth}
+            \begin{figure}
+                \centering
+                % Immagine di RViz con le terne cartesiane (Assi colorati) sul cubo
+                \includegraphics[width=0.8\linewidth, height=3cm, keepaspectratio]{placeholder.png}
+                \caption{TF Frames visualization}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+    \vspace{0.3cm}
+    \textbf{Placement Logic:}
+    The release pose is derived from the grasp pose but lifted vertically to ensure the object rests on the table:
+    $$ P_{release}.z = P_{grasp}.z + 0.15m $$
+
 \end{frame}
 
-% --- Slide 4: Placement Logic ---
-\begin{frame}[fragile]{Task 3: Placement \& Release}
-    The placement pose is calculated dynamically relative to the detected grasp transform.
-    \vspace{0.2cm}
-    \begin{itemize}
-        \item \textbf{Logic:} We reuse the grasp orientation but apply a vertical offset to ensure the cube is released \textit{on top} of the table.
-        \item \textbf{Offset:} $+15cm$ ($0.15m$) on the Z-axis.
-    \end{itemize}
-    \begin{lstlisting}[language=Python]
-# From coordinator_task3.py
-release_frame = kdl.Frame(self.base_T_marker)
-release_frame.p[2] += 0.15 # Raise Z by 15 cm
-    \end{lstlisting}
-    After placement, the \texttt{/DETACHLINK} service is called to release the object physics.
+\begin{frame}{Task 3: Precise Placement Pose}
+    The placement pose is chosen to be the same as the grasp pose to ensure that the cube is placed in approximately the same position as the one it was picked from. This is because the robot has to place the cube in a specific area of the table, and using the same pose for both picking and placing allows for a more consistent and accurate placement.
+
+
+    \begin{alertblock}{Precise Approach Logic}
+        To compensate for navigation errors, the node reads the real-time distance from the table. If the robot is wrongly positioned ($>1cm$ error), it triggers a closed-loop \textbf{Linear Approach/Backup} maneuver before attempting the grasp.
+    \end{alertblock}
 \end{frame}

@@ -548,7 +548,7 @@ class CoordinatorTask2(Node):
                     
                         if self.nav_in_progress and not self.nav_outcome:
                             self.get_logger().info("Tracking goal in progress...")
-                            time.sleep(self.debug_period)
+                            time.sleep(0.1)
                             continue
                         else:
                             self.get_logger().info("Tracking goal reached successfully.")
