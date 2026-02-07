@@ -107,6 +107,8 @@ def launch_setup(context, *args, **kwargs):
 
     # Declare the launch arguments
     world_name = LaunchConfiguration("world_name").perform(context)
+    if not world_name:    
+        world_name = 'group29'
 
     # Set the map default as env_map
     map_name = LaunchConfiguration("map_name").perform(context)
@@ -124,7 +126,7 @@ def launch_setup(context, *args, **kwargs):
     
     # Coordinates generation
     #coordinates = [0.0, -1.3, 0.0, 0.0]  # Default coordinates if random generation fails
-    coordinates = utils.map_pose_random_generator(map_path)  
+    coordinates = utils.map_pose_random_generator(map_path, task_name='task2')  
 
     ######################
     # Launch Descriptions

@@ -1,0 +1,80 @@
+% ==========================================
+% SECTION 1: INTRODUCTION
+% ==========================================
+\section{Introduction}
+
+\begin{frame}{Project Overview}
+
+    \begin{block}{Project Overview}
+        \begin{itemize}
+            \item \textbf{Objective:} Develop a complete autonomous system for the TiaGo robot combining navigation and manipulation skills.
+            \item \textbf{Tasks:}
+                \begin{enumerate}
+                    \item Map Generation (SLAM).
+                    \item Autonomous Localization \& Exploration.
+                    \item Pick and Place of specific ArUco cubes.
+                \end{enumerate}
+        \end{itemize}
+    \end{block}
+    
+    \begin{columns}
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.5\linewidth]{placeholder.png}
+                \caption{Map Generation in RViz.}
+            \end{figure}
+        \end{column}
+    
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.5\linewidth]{placeholder.png}
+                \caption{Autonomous Localization \& Exploration}
+            \end{figure}
+        \end{column}
+
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.5\linewidth]{placeholder.png}
+                \caption{Pick and Place of specific ArUco cubes}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+\end{frame}
+
+\begin{frame}{System Architecture \& Design}
+
+    \begin{block}{Development Stack}
+        \begin{itemize}
+            \item \textbf{Framework:} ROS2 Humble Hawksbill.
+            \item \textbf{Simulation:} Gazebo 11 (Physics \& Environment).
+            \item \textbf{Visualization:} RViz2 (Real-time sensor data \& markers).
+        \end{itemize}
+    \end{block}
+
+    \begin{block}{Architectural Pattern}
+        We adopted a modular \textbf{Policy vs. Actuator} approach:
+        \begin{itemize}
+            \item \textbf{Main Policy (Coordinators):} High-level nodes managing the task logic and state machine.
+            \item \textbf{Generalized Actuators:} Reusable skills (e.g., \texttt{map\_navigator}, \texttt{head\_motion}) agnostic of the specific task.
+            \item \textbf{Handshake Protocol:} Coordination is handled via strictly defined Topics, Services, and Actions to ensure robust synchronization\footnote{Custom messages and service definitions are isolated in a dedicated \textbf{ament\_cmake} package: \texttt{tiago\_exam\_interfaces}.}.
+        \end{itemize}
+    \end{block}
+
+\end{frame}
+
+\begin{frame}{Package Organization: \texttt{tiago\_exam}}
+    The Project is entirely accomplished inside the \texttt{tiago\_exam} package. This is a \textbf{ament\_python} package structured as follows:
+    
+    \begin{itemize}
+        \item \textbf{launch:} Contains three launch files to start each respective task environments.
+        \item \textbf{tiago\_exam:} Organized into sub-packages for each task and a shared utilities package.
+        \item \textbf{data:} Contains the csv file for the aruco markers records used in task2 and task3.
+        \item \textbf{config:} Stores RViz configuration files and map data for easy access across tasks.
+        \item \textbf{temp:} Contains the debug map images for the exploration surface and reference frames.
+    \end{itemize}    
+
+\end{frame}

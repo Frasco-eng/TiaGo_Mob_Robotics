@@ -2,8 +2,8 @@
 <package format="3">
   <name>tiago_exam</name>
   <version>4.1.0</version>
-  <description>Package Python per l'esame di Mobile Robotics su TIAGo</description>
-  <maintainer email="giulio@esempio.com">Giulio</maintainer>
+  <description>Python Package for Mobile Robotics Exam</description>
+  <maintainer email="giulio.mazzaroppi@studio.unibo.it">Giulio</maintainer>
   <license>Apache License 2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

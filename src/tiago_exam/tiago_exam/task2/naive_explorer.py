@@ -181,6 +181,9 @@ class NaiveExplorer(Node):
             resolution = map_data['resolution']
             origin = map_data['origin']
 
+            # Default safe coordinates (x, y, z, theta)
+            safe_coords = [0.0, -1.3, 0.0, 0.0] 
+
             # Load the map image
             pgm_path = os.path.join(os.path.dirname(self.map_path), map_data['image'])
             img = cv2.imread(pgm_path, cv2.IMREAD_GRAYSCALE)
@@ -201,14 +204,15 @@ class NaiveExplorer(Node):
             # Generate whitelist of safe pixels
             whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
             if not whitelist_pixels: return [], []
-            wx, wy = [], []
+            mx, my = [], []
             h, w = img.shape
 
-            # Randomly select goal pixels and convert to world coordinates
+            # Randomly select goal pixels and convert to map coordinates
+            # NOTE: this conversion happens in the map reference frame because the navigation stack will use the map frame as reference.
             for _ in range(self.init_goals):
                 r, c = random.choice(whitelist_pixels) # row, col (pixel coordinates)
-                wx.append(origin[0] + c * resolution) # x, y (world coordinates)
-                wy.append(origin[1] + (h - r) * resolution)
+                mx.append(origin[0] + c * resolution) # x, y (map coordinates)
+                my.append(origin[1] + (h - r) * resolution)
 
 
             # --- DEBUG SECTION START ---
@@ -231,7 +235,13 @@ class NaiveExplorer(Node):
 
             # Draw ROS World Origin & Axes
             ros_origin_px_x = int((0.0 - origin[0]) / resolution)
-            ros_origin_px_y = int(h - ((0.0 - origin[1]) / resolution))
+            ros_origin_px_y = int(h - ((0.0 - origin[1] - safe_coords[1]) / resolution))
+
+            map_origin_px_x = int((0.0 - origin[0]) / resolution)
+            map_origin_px_y = int(h - ((0.0 - origin[1]) / resolution))
+
+            pgm_origin_px_x = int((origin[0] - origin[0]) / resolution)
+            pgm_origin_px_y = int(h - ((origin[1] - origin[1]) / resolution))
 
             cv2.drawMarker(debug_img_bgr, (ros_origin_px_x, ros_origin_px_y), 
                         (255, 0, 0), cv2.MARKER_CROSS, 20, 1)
@@ -255,6 +265,37 @@ class NaiveExplorer(Node):
                         (ros_origin_px_x + 10, ros_origin_px_y - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
+            # Draw Map X Axis (Blue) -> Points Right
+            cv2.arrowedLine(debug_img_bgr, 
+                            (map_origin_px_x, map_origin_px_y), 
+                            (map_origin_px_x + axis_len_px, map_origin_px_y), 
+                            (0, 0, 255), 2, tipLength=0.3)
+            
+            # Draw Map Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
+            cv2.arrowedLine(debug_img_bgr, 
+                            (map_origin_px_x, map_origin_px_y), 
+                            (map_origin_px_x, map_origin_px_y - axis_len_px), 
+                            (0, 255, 0), 2, tipLength=0.3)
+
+            cv2.putText(debug_img_bgr, "Map", 
+                        (map_origin_px_x + 10, map_origin_px_y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+            
+            # Draw pgm X Axis (Blue) -> Points Right
+            cv2.arrowedLine(debug_img_bgr, 
+                            (pgm_origin_px_x, pgm_origin_px_y), 
+                            (pgm_origin_px_x + axis_len_px, pgm_origin_px_y), 
+                            (0, 0, 255), 2, tipLength=0.3)
+            
+            # Draw pgm Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
+            cv2.arrowedLine(debug_img_bgr, 
+                            (pgm_origin_px_x, pgm_origin_px_y), 
+                            (pgm_origin_px_x, pgm_origin_px_y - axis_len_px), 
+                            (0, 255, 0), 2, tipLength=0.3)
+
+            cv2.putText(debug_img_bgr, "pgm", 
+                        (pgm_origin_px_x + 10, pgm_origin_px_y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
             # Save Debug Image
             debug_image_path = os.path.join(temp_dir_path, 'exploration_map.png')
@@ -263,8 +304,7 @@ class NaiveExplorer(Node):
             print(f"Debug map saved to: {debug_image_path}")
             # --- DEBUG SECTION END ---
 
-                
-            return wx, wy
+            return mx, my
         except Exception as e:
             print(f"Map Error: {e}")
             return [], []

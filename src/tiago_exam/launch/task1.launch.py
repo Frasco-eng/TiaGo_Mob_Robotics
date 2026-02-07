@@ -102,6 +102,8 @@ def launch_setup(context, *args, **kwargs):
 
     # Declare the launch arguments
     world_name = LaunchConfiguration("world_name").perform(context)
+    if not world_name:    
+        world_name = 'group29'
 
     # Set the map default as env_map
     map_name = LaunchConfiguration("map_name").perform(context)

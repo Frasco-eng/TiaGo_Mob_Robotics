@@ -136,17 +136,18 @@ class CoordinatorTask3(Node):
         # Distance from table logic variables
         self.ref_distance_to_table = None
         self.approach_threshold = 0.01
+        self.backup_threshold = 0.15
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.pick_marker_frame = "target_aruco_pick_marker_frame"
         self.place_marker_frame = "target_aruco_place_marker_frame"
         self.world_pick_surface = {
-            'x': -3.0, 'y': -2.7, 'z': 0.15,
+            'x': -2.90, 'y': -2.7, 'z': 0.15,
             'qx': 0.0, 'qy': 0.0, 'qz': -0.7071, 'qw': 0.7071,
-            'size': [1.0, 0.5, 0.3] # x, y, z dal box
+            'size': [1.0, 0.5, 0.3]
         }
 
         self.world_place_surface = {
-            'x': 0.0, 'y': -5.7, 'z': 0.15,
+            'x': 0.25, 'y': -5.7, 'z': 0.15,
             'qx': 0.0, 'qy': 0.0, 'qz': -0.7071, 'qw': 0.7071,
             'size': [1.0, 0.5, 0.3]
         }
@@ -687,6 +688,18 @@ class CoordinatorTask3(Node):
     
     def remove_collision_object(self, object_id: str) -> None:
         self.call_send_collision_object_srv("REMOVE", object_id)
+
+    def run_forward(self):
+        cmd = Twist()
+        cmd.linear.x = 0.1
+        self.cmd_vel_pub.publish(cmd)
+    
+    def run_backward(self):
+        cmd = Twist()
+        cmd.linear.x = -0.1
+        self.cmd_vel_pub.publish(cmd)
+
+
         
     ##################################
     # STATE MACHINE
@@ -770,24 +783,11 @@ class CoordinatorTask3(Node):
                         if dist is not None:
                             self.ref_distance_to_table = dist
                             self.get_logger().info(f"REFERENCE DISTANCE SAVED: {self.ref_distance_to_table:.3f} meters")
-                            
-                            # OPZIONALE: Manda comando al manipulator per aggiungere collision object
-                            
-                            
-                            # Invia comando per AGGIUNGERE il collision object
-                            # self.call_send_manip_goal_srv(type_cmd="ADD_COLLISION_TABLE", frame=collision_frame)
                         else:
                             self.get_logger().warn("Could not read distance! Using default.")
-                            self.ref_distance_to_table = 0.14 # Default di sicurezza
-
-
+                            self.ref_distance_to_table = 0.14 # Default
 
                         self.generate_collision_object("ADD", "pick_table")
-
-
-
-
-
 
                     self.get_logger().debug("--- State: PICK ---")
                     
@@ -844,6 +844,9 @@ class CoordinatorTask3(Node):
                         else:
                             self.get_logger().info("Pick operation completed.")
                             self.remove_collision_object("pick_table")
+                            while self.get_distance_from_base(self.pick_marker_frame) <= self.backup_threshold:
+                                self.get_logger().info(f"Running backup from {self.pick_marker_frame}. Dist: {self.get_distance_from_base(self.pick_marker_frame):.3f}m")
+                                self.run_backward()
                             
                             self.move_head_outcome = False
                             self.move_head_in_progress = False
@@ -883,14 +886,15 @@ class CoordinatorTask3(Node):
                                 self.get_logger().info("Arrived at Place Station, checking distance...")
                                 current_dist = self.get_distance_from_base(self.place_marker_frame)
                                 if current_dist is not None and self.ref_distance_to_table is not None:
-                                    diff = abs(current_dist - self.ref_distance_to_table)
+                                    diff = current_dist - self.ref_distance_to_table
                                     if diff > self.approach_threshold:
                                         self.get_logger().info(f"Too far! Diff: {diff:.3f}m. Approaching...")
+                                        self.run_forward()
+
+                                    elif diff < -self.approach_threshold:
+                                        self.get_logger().info(f"Too close! Diff: {diff:.3f}m. Backing off...")
+                                        self.run_backward()
                                         
-                                        # Comando di velocità lineare X (avanti piano)
-                                        cmd = Twist()
-                                        cmd.linear.x = 0.01 # 1 cm/s
-                                        self.cmd_vel_pub.publish(cmd)
                                     else:
                                         # Siamo alla distanza giusta (o troppo vicini, nel dubbio ci fermiamo)
                                         self.get_logger().info(f"Target distance reached (Error: {diff:.3f}m). Stopping.")
@@ -963,14 +967,16 @@ class CoordinatorTask3(Node):
                             
                         else:
                             self.get_logger().info("Place operation completed.")
+                            self.remove_collision_object("place_table")
+                            while self.get_distance_from_base(self.place_marker_frame) <= self.backup_threshold:
+                                self.get_logger().info(f"Running backup from {self.place_marker_frame}. Dist: {self.get_distance_from_base(self.place_marker_frame):.3f}m")
+                                self.run_backward()
                             
                             self.move_head_outcome = False
                             self.move_head_in_progress = False
                             self.latest_aruco_frame = None
                             self.move_manip_in_progress = False
                             self.move_manip_outcome = False
-
-                            self.remove_collision_object("place_table")
                         
                             self.current_state = State.NEXT_CUBE     
                             

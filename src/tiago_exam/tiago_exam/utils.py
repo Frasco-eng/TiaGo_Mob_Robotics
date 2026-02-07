@@ -36,7 +36,7 @@ def get_package_src_directory(package_name):
         
     return src_path
 
-def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.0) -> list[float]:
+def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clearance=1.0, task_name: str = "") -> list[float]:
     """
     Generates a random pose (x, y, theta) on the map defined by map_path,
     ensuring the pose is in free space with a specified clearance from obstacles.
@@ -49,6 +49,8 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         Default safe coordinates to return in case of failure [x, y, z, theta].
     clearance : float
         Minimum distance from obstacles in meters.
+    task_name : str
+        Optional name of the task for logging purposes.
         
     Returns
     -------
@@ -58,7 +60,7 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
     # Seed random seed based on time
     random.seed(time.time())
     
-    print(f"Generating random pose from map: {map_path} with clearance {clearance}m")
+    print(f"Generating random pose from map: {map_path} with clearance {clearance}m for task: {task_name}")
 
     try: 
         # Load map YAML
@@ -162,7 +164,7 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
                 
         # Save Debug Spawn Map Image
-        debug_image_path = os.path.join(temp_dir_path, 'spawn_map_with_frames.png')
+        debug_image_path = os.path.join(temp_dir_path, f'spawn_map_with_frames_{task_name}.png')
         cv2.imwrite(debug_image_path, debug_img_bgr)
         
         print(f"Debug spawn map saved to: {debug_image_path}")

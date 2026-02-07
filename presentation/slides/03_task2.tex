@@ -1,0 +1,171 @@
+% ==========================================
+% SECTION 3: TASK 2 - NAVIGATION
+% ==========================================
+\section{Task 2: Navigation}
+
+% Slide 1: System Orchestration
+\begin{frame}{Task 2: System Architecture \& Orchestration}
+
+    The complex behavior required for Task 2 is managed by a central \textbf{Coordinator Node} that acts as the high-level decision maker.
+
+    \begin{columns}
+        \begin{column}{0.6\textwidth}
+            \begin{block}{The Coordinator Design}
+                \begin{itemize}
+                    \item \textbf{Finite State Machine (FSM):} Strict transition logic between \textit{Exploring}, \textit{Tracking}, and \textit{Inspecting} states.
+                    \item \textbf{Concurrency Handling:} Utilizes \texttt{ReentrantCallbackGroup} and \texttt{MultiThreadedExecutor}. This allows the node to process sensory interrupts (e.g., seeing a marker) immediately, even while blocking navigation actions are active.
+                    \item \textbf{Interrupt Logic:} The standard exploration loop is designed to be preempted instantly upon ArUco detection.
+                \end{itemize}
+            \end{block}
+        \end{column}
+
+        \begin{column}{0.4\textwidth}
+            \begin{figure}
+                \centering
+                % Qui starebbe benissimo un diagramma a stati (Init -> Exploring <-> Tracking -> Homing)
+                \includegraphics[width=\linewidth]{placeholder.png}
+                \caption{State Machine Logic}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+\end{frame}
+
+% Slide 2: Global Localization
+\begin{frame}{Task 2: Global Localization}
+
+    Since the robot spawns in an unknown location, standard AMCL localization is insufficient immediately after startup. We implemented a robust initialization routine.
+    \begin{columns}
+        \begin{column}{0.6\textwidth}
+            \begin{block}{The Converge Strategy:}
+                \begin{enumerate}
+                    \item \textbf{Particle Spread:} Trigger \texttt{/reinitialize\_global\_localization} to distribute AMCL particles uniformly across the map.
+                    \item \textbf{Data Gathering:} The robot executes a $360^\circ$ in-place rotation at $1.0$ rad/s to feed the laser scan matcher.
+                    \item \textbf{Covariance Check:} The routine continuously monitors the pose covariance matrix, ensuring it falls below strict thresholds before allowing any movement.
+                \end{enumerate}
+            \end{block}
+        \end{column}
+        
+        \begin{column}{0.3\textwidth}
+            \begin{figure}
+                \centering
+                % Screenshot di RViz con le particelle AMCL sparse
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \caption{AMCL Particle Convergence}
+            \end{figure}
+            \begin{figure}
+                \centering
+                % Grafico che mostra la diminuzione della covarianza nel tempo durante l'inizializzazione
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \caption{Covariance Reduction Over Time}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+\end{frame}
+
+% Slide 3: Exploration Strategy
+\begin{frame}{Task 2: Exploration Strategy}
+
+    After the localization, the Coordinator Node activate the following nodes:
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Generalized Nodes}
+                \begin{itemize}
+                    \item \textbf{Aruco Marker Detector:} The node continuously monitors the camera feed for the station markers.
+                    \item \textbf{Explorator:} The node processes the occupancy grid map to create a "whitelist" of safe navigation targets, ensuring the robot only attempts to navigate to locations that are free of obstacles.
+                    \item \textbf{Navigator:} The robot continuously samples from the "whitelist" of safe exploration goals. After reaching each goal, the robot performs a $360^\circ$ rotation to improve its environmental awareness.
+                    \end{itemize}
+            \end{block}
+        \end{column}
+            
+        \begin{column}{0.5\textwidth}
+            \begin{figure}
+                \centering
+                % Screenshot della mappa con frame del task 2, con i goal in verde e i frame
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \caption{Clearance-Based Goal Sampling}
+            \end{figure}
+
+            \begin{figure}
+                \centering
+                % Screenshot di RViz con il robot che naviga verso un goal random sicuro
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \caption{Random Safe Goal Navigation}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+    
+
+    \vspace{0.1cm}
+
+\end{frame}
+
+
+\begin{frame}{Task 2: Exploration Strategy - Contd.}
+    
+    \begin{block}{Exploration Strategy}
+        \begin{itemize}
+            \item \textbf{Tracking:} Once an ArUco marker is detected, the robot is brought to a specific distance from the marker, while continuously facing it by adjusting the camera tilt and pan angles.
+            \item \textbf{Inspecting:} Once the robot is correctly positioned, it transitions to the Inspecting state, where the marker and robot Pose is saved in a csv file for later use.
+            \item \textbf{Homing:} After all the markers are detected, the robot automatically navigates back to the Home Position.
+        \end{itemize}
+    \end{block}
+
+    \begin{columns}
+        
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                % Screenshot di RViz con il robot che segue un marker ArUco con la  testa bassa e la camera che inquadrano il marker
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \caption{Aruco Tracking Behavior}
+            \end{figure}
+        \end{column}
+
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                % Screenshot di RViz con il robot che guarda il marker arrivato alla stazione
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \caption{Aruco Inspecting Behavior}
+            \end{figure}
+        \end{column}
+
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                % Screenshot di RViz con il robot che torna alla Home Position con i frame salvati e messi statici su rviz
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \caption{Homing Behavior}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+\end{frame}
+
+% Forse questa slide si può far volare o metterla nell'appendice
+\begin{frame}{Task 2: Safety Navigation}
+    \begin{block}{Map Processing Pipeline}
+            Using OpenCV on the occupancy grid map:
+            \begin{enumerate}
+                \item \textbf{Safety Mapping:} Applied \texttt{cv2.distanceTransform} to calculate the distance of every pixel to the nearest obstacle.
+                \item \textbf{Filtering:} Created a "Whitelist Mask" of pixels where:
+                $$ d_{obstacle} > (R_{robot} + \text{Clearance}_{0.7m}) $$
+                \item \textbf{Goal Selection:} Randomly samples coordinates from the whitelist and converts them from Image Frame (pixels) to World Frame (meters).
+            \end{enumerate}
+    \end{block}
+
+        \begin{center}
+            \textit{Result: The robot never attempts to navigate into walls or narrow traps.}
+        \end{center}
+\end{frame}
+
+\begin{frame}{Task 2: Navigation Video Result}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.6\linewidth]{placeholder.png}
+        \caption{Video Placeholder - Link to YouTube or local file.}
+    \end{figure}
+\end{frame}
