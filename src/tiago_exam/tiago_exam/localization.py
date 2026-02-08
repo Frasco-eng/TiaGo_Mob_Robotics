@@ -8,15 +8,19 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from std_srvs.srv import Empty
-from std_msgs.msg import Bool
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 
 # Python Libraries
 import time
 import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+# Custom Imports (Assuming this module exists in your environment)
+from tiago_exam import utils
 
 ##################################
-# Constatnts
+# Constants
 ##################################
 ROTATION_VELOCITY = 1.0     # Radians per second 
 TWO_PI = 2 * np.pi          # Full rotation in radians
@@ -29,23 +33,42 @@ class GlobalLocalizationNode(Node):
         super().__init__('global_localization_node')
 
         ##################################
+        # Parameters & Path Setup
+        ##################################
+        # Resolve the path dynamically using the utils module
+        try:
+            ws_src_dir = utils.get_package_src_directory('tiago_exam')
+            path_dir = os.path.join(ws_src_dir, 'temp')
+            # Ensure the directory exists
+            if not os.path.exists(path_dir):
+                os.makedirs(path_dir)
+            default_plot_path = os.path.join(path_dir, 'covariance_plot.png')
+        except Exception as e:
+            self.get_logger().warn(f'Could not resolve package path: {e}. Using default local path.')
+            default_plot_path = 'covariance_plot.png'
+
+        self.declare_parameter('covariance_plot_path', default_plot_path)
+        self.plot_path = self.get_parameter('covariance_plot_path').get_parameter_value().string_value
+        
+        ##################################
         # QoS Profile Setup
         ##################################
         qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,         # Ensures message delivery
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,    # Keeps the last message for late subscribers
-            history=HistoryPolicy.KEEP_LAST,                # Keep only the last message
-            depth=1                                         # Depth of 1 for last message
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
         )
 
         ##################################
         # Subscribers
         ##################################
+        # AMCL callback now handles logging and plotting directly
         self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_callback, qos_profile)
         
         ##################################
         # Publishers
-        ##################################10
+        ##################################
         self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         
         ##################################
@@ -56,12 +79,19 @@ class GlobalLocalizationNode(Node):
         ##################################
         # Thresholds and Flags
         ##################################
-        self.pos_threshold = 0.03               # Variance X e Y (square meters)
-        self.yaw_threshold = 0.03               # Variance Yaw (square radians)
-        self.max_attempt_before_reset = 7       # Max attempts before resetting particles
+        self.pos_threshold = 0.03               # Variance X and Y
+        self.yaw_threshold = 0.03               # Variance Yaw
+        self.max_attempt_before_reset = 7       
         
-        self.amcl_pose_received = False         # Flag to check if we received AMCL pose
-        self.current_covariance = []            # Store the latest covariance
+        self.amcl_pose_received = False
+        self.current_covariance = []
+
+        # Data Logging for Plotting
+        self.log_var_x = []
+        self.log_var_y = []
+        self.log_var_yaw = []
+        self.log_steps = []
+        self.msg_counter = 0
 
         ##################################
         # Initialization Wait
@@ -71,7 +101,7 @@ class GlobalLocalizationNode(Node):
             self.get_logger().info('Service not available, waiting again...')
         self.get_logger().info('AMCL service available.')
 
-        self.get_logger().info('Global Localization node started.')
+        self.get_logger().info(f'Global Localization node started. Plot updating live at: {self.plot_path}')
 
     ##################################
     # Callbacks
@@ -79,61 +109,72 @@ class GlobalLocalizationNode(Node):
     def amcl_callback(self, msg: PoseWithCovarianceStamped) -> None:
         """
         Callback for AMCL pose updates.
-        Updates the current covariance and sets the received flag.
-
-        Parameters
-        ----------
-        msg : PoseWithCovarianceStamped
-            The AMCL pose message containing covariance information.
+        Logs data and updates the plot on every message received.
         """
-        # Raise flag
         self.amcl_pose_received = True
-
-        # Update covariance
         self.current_covariance = msg.pose.covariance
+
+        # Extract variances
+        # Covariance matrix is 6x6 (36 elements). Index 0=X, 7=Y, 35=Yaw
+        var_x = self.current_covariance[0]
+        var_y = self.current_covariance[7]
+        var_yaw = self.current_covariance[35]
+
+        # Update Logs
+        self.msg_counter += 1
+        self.log_steps.append(self.msg_counter)
+        self.log_var_x.append(var_x)
+        self.log_var_y.append(var_y)
+        self.log_var_yaw.append(var_yaw)
+
+        # Trigger Plot Update (Real-time tracking)
+        # Note: Saving a file every callback can be heavy. 
+        # If AMCL is very fast (>10Hz), consider plotting every Nth message.
+        # For now, we plot every message as requested.
+        self.save_covariance_plot()
 
     ##################################
     # Localization Methods
     ##################################
     def call_global_localization(self) -> None:
-        """
-        Calls the global localization service to spread particles across the map.   
-        """
         self.get_logger().info('Calling Global Localization Service...')
         req = Empty.Request()
         future = self.global_loc_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
-        self.get_logger().info('Global Localization initialized. Particles are spread map-wide.')
+        self.get_logger().info('Global Localization initialized.')
+
+        # Reset logs if we re-initialize globally
+        self.log_var_x.clear()
+        self.log_var_y.clear()
+        self.log_var_yaw.clear()
+        self.log_steps.clear()
+        self.msg_counter = 0
 
     def localization_process(self) -> None:
         """
-        Main localization process.
-        Rotates the robot and checks for localization convergence.
+        Main Loop: Controls the robot motion. 
+        The plotting is now handled asynchronously in the callback.
         """
-        # Call global localization to spread particles
         self.call_global_localization()
         
-      
-        # Start localization attempts
         attempt = 0  
 
         while rclpy.ok(): 
             self.get_logger().info(f'--- Localization Attempt {attempt+1} ---')
 
             if attempt >= self.max_attempt_before_reset:
-                self.get_logger().warn(f'Failed for {attempt} times! Relaunching Global Localization to reset particles...')
+                self.get_logger().warn(f'Failed for {attempt} times! Resetting particles...')
                 self.call_global_localization()
-                attempt = 0  # Reset the counter to give new particles time to converge
-                time.sleep(1.0) # Small technical pause
+                attempt = 0 
+                time.sleep(1.0)
             
-            # Rotate to gather sensor data
             self.rotate()
             
-            # Spin to process AMCL messages
+            # Spin to ensure callbacks are processed (and plots updated)
             for _ in range(10):
                 rclpy.spin_once(self, timeout_sec=0.1)
 
-            # Check if we have converged
+            # Check convergence
             if self.check_covariance(): 
                 self.get_logger().info('SUCCESS: Robot is localized!')
                 break
@@ -143,80 +184,89 @@ class GlobalLocalizationNode(Node):
             attempt += 1
 
     def rotate(self) -> None:
-        """
-        Rotates the robot 360 degrees in place to gather sensor data for localization.
-        Publishes velocity commands at a fixed frequency to ensure twist_mux compatibility.
-        """
-        # Create a Twist message for rotation
         vel_msg = Twist()
         vel_msg.angular.z = ROTATION_VELOCITY
-        
-        # Calculate duration based on speed
         duration = abs(TWO_PI / ROTATION_VELOCITY)
-        freq = 10.0  # Frequency to publish commands (Hz)
-        self.get_logger().info(f'Rotating for {duration:.2f} seconds at {freq} Hz...')
-
-        # Use the ROS clock for simulation-accurate timing
+        freq = 10.0
+        
         start_time = self.get_clock().now()
         
-        # Loop to keep the command alive for the twist_mux
         while (self.get_clock().now() - start_time).nanoseconds / 1e9 < duration:
             self.vel_pub.publish(vel_msg)
-            
-            # Process callbacks (to receive AMCL updates while moving)
+            # Spin is crucial here: it triggers amcl_callback -> saves plot
             rclpy.spin_once(self, timeout_sec=0.1)
-            
-            # Small sleep to maintain frequency
             time.sleep(1.0 / freq)
         
-        # End rotation
         self.stop()
         self.get_logger().info('Rotation finished. Waiting for particles to settle...')
         time.sleep(1.0)
         
     def stop(self) -> None:
-        """
-        Stops the robot by publishing zero velocities.
-        """
         vel_msg = Twist()
         self.vel_pub.publish(vel_msg)
     
     def check_covariance(self) -> bool:
         """
-        Checks if the localization covariance has dropped below the threshold,
-        indicating successful localization.
+        Checks thresholds only. Logging is done in callback.
         """
         if not self.amcl_pose_received:
             self.get_logger().warn('No AMCL pose received yet.')
             return False
         
-        # Extract variances from covariance matrix
         var_x = self.current_covariance[0]
         var_y = self.current_covariance[7]
         var_yaw = self.current_covariance[35]
 
-        self.get_logger().info(f'Var_x: {var_x:.4f}, Var_y: {var_y:.4f}, Var_yaw: {var_yaw:.4f}')
+        self.get_logger().info(f'Current Variances -> X: {var_x:.4f}, Y: {var_y:.4f}, Yaw: {var_yaw:.4f}')
 
-        # Compute metric
         if (var_x < self.pos_threshold and 
             var_y < self.pos_threshold and 
             var_yaw < self.yaw_threshold):
             return True
         return False
 
+    def save_covariance_plot(self) -> None:
+        """
+        Generates and overwrites the plot file with the latest data.
+        """
+        try:
+            plt.switch_backend('Agg') # Ensure headless mode
+            plt.figure(figsize=(10, 6))
+            
+            # Plot the full history
+            plt.plot(self.log_steps, self.log_var_x, label='Var X', color='blue', linewidth=1)
+            plt.plot(self.log_steps, self.log_var_y, label='Var Y', color='orange', linewidth=1)
+            plt.plot(self.log_steps, self.log_var_yaw, label='Var Yaw', color='green', linewidth=1)
+            
+            # Add Threshold lines
+            plt.axhline(y=self.pos_threshold, color='red', linestyle='--', alpha=0.5, label='Pos Threshold')
+            plt.axhline(y=self.yaw_threshold, color='purple', linestyle='--', alpha=0.5, label='Yaw Threshold')
+
+            plt.title('AMCL Covariance Evolution (Live)')
+            plt.xlabel('AMCL Updates (count)')
+            plt.ylabel('Variance')
+            plt.legend()
+            plt.grid(True)
+            
+            # Save
+            plt.savefig(self.plot_path)
+            plt.close()
+            
+        except Exception as e:
+            self.get_logger().error(f'Failed to update plot: {str(e)}')
 
 ##################################
 # Main Function
 ##################################
 def main(args=None):
     rclpy.init(args=args)
-
     node = GlobalLocalizationNode()
-
-    time.sleep(2.0)  # Small delay to ensure everything is set up
-
+    
+    # Wait briefly for connection
+    time.sleep(2.0)
+    
     node.localization_process()
-
+    
     node.destroy_node()
     rclpy.shutdown()
 

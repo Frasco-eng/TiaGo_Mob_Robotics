@@ -5,10 +5,10 @@
 \begin{frame}{Task 1: Autonomous Map Generation}
 
     \begin{block}{Objective}
-        Perform a full autonomous exploration of an unknown environment to generate a consistent 2D occupancy grid map using SLAM.
+        Perform a \textbf{full autonomous exploration} of \textbf{an unknown environment} to generate a consistent 2D occupancy grid map using SLAM.
     \end{block}
 
-    \vspace{0.5cm}
+    \vspace{0.1cm}
 
     \begin{columns}
         \begin{column}{0.55\textwidth}
@@ -25,7 +25,7 @@
         \begin{column}{0.45\textwidth}
             \begin{figure}
                 \centering
-                \includegraphics[width=0.8\linewidth]{placeholder.png}
+                \includegraphics[width=0.6\linewidth]{kitchen_table.png}
                 \caption{Environment in Gazebo 11.}
             \end{figure}
         \end{column}
@@ -57,14 +57,34 @@
 \end{frame}
 
 
+\begin{frame}{Task 1: Safety Configuration}
 
-\begin{frame}{Task 1: System Configuration \& Safety}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \begin{alertblock}{Safety Measure: Pre-Exploration Configuration}
+                Before moving, the system executes a mandatory \textbf{Tuck Arm} procedure. Folding the arm into a safe configuration minimizes the robot's footprint, preventing collisions with low obstacles or door frames during autonomous navigation.
+            \end{alertblock}
+        \end{column}
 
-    \begin{alertblock}{Safety Measure: Pre-Exploration Configuration}
-        Before moving, the system executes a mandatory \textbf{Tuck Arm} procedure. Folding the arm into a safe configuration minimizes the robot's footprint, preventing collisions with low obstacles or door frames during autonomous navigation.
-    \end{alertblock}
+        \begin{column}{0.45\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.8\linewidth]{SafePose.png}
+                \caption{Tuck Arm Configuration for Safe Navigation}
+            \end{figure}
+        \end{column}
+    \end{columns}
+    
+    \vspace{0.5cm}
+    This configuration is also considered in the navigation for Task 2 and Task 3 as safe Pose.
 
-    \vspace{0.1cm}
+    
+
+\end{frame}
+
+
+
+\begin{frame}{Task 1: System Configuration}
 
     \begin{columns}
         \begin{column}{0.55\textwidth}
@@ -81,7 +101,7 @@
         \begin{column}{0.45\textwidth}
             \begin{figure}
                 \centering
-                \includegraphics[width=0.8\linewidth]{placeholder.png}
+                \includegraphics[width=0.8\linewidth]{Costmap.png}
                 \caption{Generated Occupancy Grid}
             \end{figure}
         \end{column}
@@ -93,7 +113,9 @@
 \begin{frame}{Task 1: Exploration Video Result}
     \begin{figure}
         \centering
-        \includegraphics[width=0.6\linewidth]{placeholder.png}
-        \caption{Video Placeholder - Link to YouTube or local file.}
+        \href{https://liveunibo.sharepoint.com/sites/idughis/_layouts/15/stream.aspx?id=\%2Fsites\%2Fidughis\%2FShared\%20Documents\%2FGeneral\%2FMagistrale\%2FAMR\%2FVideos\%2FTask1\%2Emp4&referrer=StreamWebApp\%2EWeb&referrerScenario=AddressBarCopied\%2Eview\%2Efe3d0b40\%2D24c3\%2D4d51\%2Dafda\%2D700f9ff0e2a9}{
+            \includegraphics[width=0.9\linewidth]{Thumb_task1.png}
+        }
+        \caption{Exploration Task Execution (Click to play in browser)}
     \end{figure}
 \end{frame}

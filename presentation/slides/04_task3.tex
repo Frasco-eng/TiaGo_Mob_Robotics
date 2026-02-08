@@ -2,8 +2,35 @@
 % SECTION 4: TASK 3 - MANIPULATION
 % ==========================================
 \section{Task 3: Manipulation}
+\label{sec: Task 3}
 
-\begin{frame}{Task 3: Manipulation Coordination}
+\begin{frame}{Task 3: Pick \& Place}
+
+    \begin{block}{Objective}
+        Execute a precise \textbf{Pick \& Place} operation leveraging on:
+        \begin{itemize}
+            \item The map generated in Task 1.
+            \item The marker locations identified in Task 2.
+        \end{itemize}
+    \end{block}
+
+    \vspace{0.1cm}
+
+    \textbf{Operational Constraints}
+    \par
+    The manipulation task requires handling strict mechanical and spatial tolerances:
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Grasp Tolerance:} The parallel gripper has minimal mechanical compliance. Even slight ArUco pose estimation errors (\textit{homography noise}) can cause the fingers to collide with the object rather than grasping it.
+    
+        \item \textbf{Kinematic Reachability:} Placement success is strictly coupled with \textbf{Base Positioning}. If the robot stops too far from the table, the arm's maximum reach is insufficient, causing the cube to be released into the void.
+        
+        \item \textbf{Deployment Safety:} Transitioning the arm from the \textit{Safe Travel Configuration} to the \textit{Work Configuration} near obstacles poses a high risk of collision with the table edge.
+    \end{itemize}
+
+\end{frame}
+
+\begin{frame}{Task 3: Coordinator}
 
     The \texttt{coordinator\_task3} node orchestrates the sequence, bridging the data gathered in Task 2 with the actuation logic.
 
@@ -11,7 +38,7 @@
 
     \begin{block}{Execution Workflow}
         \begin{enumerate}
-            \item \textbf{Data Ingestion:} Parses \texttt{marker\_locations.csv} to retrieve the exact pose of the targets found during exploration.
+            \item \textbf{Data Ingestion:} Parses \texttt{marker\_locations.csv} to retrieve the exact pose of the tables targets found during Task 2 exploration.
             \item \textbf{State Sequence:} Enforces the required order of operations:
             {
                 \small
@@ -22,25 +49,91 @@
         \end{enumerate}
     \end{block}
 
-\end{frame}
+    \vspace{0.1cm}
 
-\begin{frame}{Task 3: Grasping \& Manipulation Strategy}
-
-    The manipulation pipeline implements a State Machine handling
-    \begin{itemize}
-        \item \textbf{Grasp Procedure:} \textit{Pre-Grasp} $\rightarrow$ \textit{Grasp} $\rightarrow$ \textit{Post-Grasp}.
-        \item \textbf{Release Procedure:} \textit{Pre-Release} $\rightarrow$ \textit{Release} $\rightarrow$ \textit{Post-Release}.
-    \end{itemize}
-
-    Between this two main phases the robot perform navigation (handled by the coordinator and the navigation stack). To ensure a \textbf{safe} navigation the manipulator also perform additional phases.
-    \begin{itemize}
-        \item \textbf{Safe Pose:} Before navigating, the arm moves to a predefined "safe" configuration to avoid collisions with the environment during navigation.
-        \item \textbf{Idle:} After moving to the safe pose, the arm enters an idle state, waiting for the coordinator to signal the next command.
-    \end{itemize}
-    \vspace{0.2cm}
-
+    Once all targets cubes are processed, the coordinator commands the robot to return to the \textbf{Home Position}, signaling Task 3 completion.
 
 \end{frame}
+
+\begin{frame}{Task 3: Manipulator}
+
+    The \texttt{manipulator} node orchestrates the sequence, handling the actual arm movements and gripper actions on the basis of the \texttt{coordinator\_task3} commands.
+    The commands are in the form of:
+    \begin{itemize}
+        \item \textbf{Pick Command:} \texttt{'PICK\_<cube\_id>'}.
+        \item \textbf{Place Command:} \texttt{'PLACE\_<cube\_id>'}.
+    \end{itemize}   
+
+    This commands issue the manipulator node to execute the corresponding manipulation sequence.
+    \begin{block}{\texttt{PICK\_<63>}}
+        {
+            \small
+            $$ \text{Safe Pose} \xrightarrow{\text{Idle for aruco pose update}} \text{Pre\_Grasp} \rightarrow \text{Grasp} \rightarrow \text{Post\_Grasp} \rightarrow \text{Safe Pose} $$
+        }
+    \end{block}
+
+    \vspace{0.1cm}
+    
+    \begin{block}{\texttt{PLACE\_<63>}}
+        {
+            \small
+            $$ \text{Safe Pose} \xrightarrow{\text{Idle for place station}} \text{Pre\_Release} \rightarrow \text{Release} \rightarrow \text{Post\_Release} \rightarrow \text{Safe Pose} $$
+        }
+    \end{block}
+
+    \vspace{0.1cm}
+
+\end{frame}
+
+\begin{frame}{Task 3: Coordinator \& Manipulator State Machines}
+    \begin{columns}[c] % [c] ensures vertical alignment
+        \hfill % Spacing before first column
+        \begin{column}{0.2\textwidth} % Slightly smaller to allow for padding
+            \begin{figure}
+                \centering
+                \includegraphics[width=\linewidth]{task3_state_machine.png}
+                \caption{Coordinator}
+            \end{figure}
+        \end{column}
+        
+        \hfill % Spacing between columns
+        
+        \begin{column}{0.4\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=\linewidth]{task3_manipulator.png}
+                \caption{Manipulator}
+            \end{figure}
+        \end{column}
+        \hfill % Spacing after second column
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Task 3: Marker Perception}
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Perception Sequence}
+                \textbf{Head Scanning \& Latching}
+                \begin{itemize}
+                    \item While the aruco detector is running the robot head \textbf{tilts down} when the station is reached.
+                    \item The system caches the \textbf{latest valid transform}.
+                \end{itemize}
+            \end{block}
+        \end{column}
+
+        \begin{column}{0.5\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.8\linewidth]{CubeInspection.png}
+                \caption{Head Scanning for Marker Detection}
+            \end{figure}
+        \end{column}
+    \end{columns}
+    \vspace{0.5cm}
+    Once the robot head hass latched onto the marker, the robot stare at the marker for 1 second to ensure a stable pose estimation before executing the grasping sequence.
+
+\end{frame}
+
 
 \begin{frame}{Task 3: Grasp \& Release Selection Pose}
     \begin{block}{Pose Calculation}
@@ -50,8 +143,8 @@
         \begin{columns}
         \begin{column}{0.6\textwidth}
             \begin{exampleblock}{Pose Computation (KDL)}
-                Given the marker pose $T_{base}^{marker}$, we compute the approach vector by applying a geometrical offset:
-                $$ T_{grasp} = T_{base}^{marker} \cdot T_{rotY(90^\circ)} \cdot T_{offset(-0.4m)} $$
+                Given the marker pose $^{base}T_{marker}$, we compute the approach vector by applying a geometrical offset:
+                $$ T_{grasp} = ^{base}T_{marker} \cdot T_{rotY(90^\circ)} \cdot T_{offset(-0.4m)} $$
                 This aligns the gripper normal with the cube's face.
             \end{exampleblock}
         \end{column}
@@ -60,7 +153,7 @@
             \begin{figure}
                 \centering
                 % Immagine di RViz con le terne cartesiane (Assi colorati) sul cubo
-                \includegraphics[width=0.8\linewidth, height=3cm, keepaspectratio]{placeholder.png}
+                \includegraphics[width=0.8\linewidth, height=3cm, keepaspectratio]{Planning5.png}
                 \caption{TF Frames visualization}
             \end{figure}
         \end{column}
@@ -69,42 +162,130 @@
     \vspace{0.3cm}
     \textbf{Placement Logic:}
     The release pose is derived from the grasp pose but lifted vertically to ensure the object rests on the table:
-    $$ P_{release}.z = P_{grasp}.z + 0.15m $$
+    $$ P_{release_{z}} = P_{grasp_{z}} + 0.15m $$
 
 \end{frame}
 
-\begin{frame}{Task 3: Precise Placement Pose}
-    The placement pose is chosen to be the same as the grasp pose to ensure that the cube is placed in approximately the same position as the one it was picked from. This is because the robot has to place the cube in a specific area of the table, and using the same pose for both picking and placing allows for a more consistent and accurate placement.
+\begin{frame}{Task 3: Manipulation Safety \& Robustness}
 
-    The grasp pose is saved and re-used for the placement phase, for this reason, an exact distance between the robot and the table is required to ensure a successful grasp and placement. 
+    \begin{center}
+        The manipulation sequence follows a strict cycle:
+        $$ \text{Pre\_op} \rightarrow \text{op} \rightarrow \text{Post\_op} \rightarrow \text{Safe Pose} $$
+    \end{center}
     
-    To achieve this, once the robot reaches the grasp pose in the map, it measures the distance to the table and record it. This distance is then used to adjust the robot's position during the placement phase. 
-    \begin{alertblock}{Precise Approach Logic}
-        To compensate for navigation errors, the node reads the real-time distance from the table. If the robot is wrongly positioned ($>1cm$ error), it triggers a closed-loop \textbf{Linear Approach/Backup} maneuver before attempting the grasp.
+    \begin{alertblock}{Motion Safety: Decoupled Retraction}
+        The $0.4m$ approach offset requires the \texttt{arm\_torso} group to extend significantly. To prevent the torso from lowering while the arm is still over the table (risk of collision), we implemented a **Decoupled Safe Procedure**:
+        \begin{enumerate}
+            \item \textbf{Arm First:} The arm retracts to a folded configuration while the torso remains fixed.
+            \item \textbf{Torso Second:} Only once the arm is safe, the torso lowers to the travel height.
+        \end{enumerate}
     \end{alertblock}
+    \textbf{Environmental Awareness:}
+    Upon arrival, \textbf{Collision Objects} representing the table (known dimensions) are spawned in MoveIt to forbid planning through the surface.
 \end{frame}
 
-\begin{frame}{Simulation Stability: Link Attacher}
+\begin{frame}{Task 3: Manipulation Safety \& Robustness (Cont.)}
+\begin{columns}
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.8\linewidth]{CubeExtraction.png}
+                \caption{Cube Extraction}
+            \end{figure}
+        \end{column}
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.8\linewidth]{ArmRetraction.png}
+                \caption{Arm Retraction}
+            \end{figure}
+        \end{column}
 
-    Physics engines (Gazebo/ODE) struggle with friction simulation during mobile manipulation, causing objects to slip from the gripper during base motion.
+        \begin{column}{0.33\textwidth}
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.8\linewidth]{TorsoRetraction.png}
+                \caption{Torso Retraction}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+    \vspace{0.5cm}
+    At the end of the manipulation operation the robot performs a \textit{backup} maneuver to reach a safe distance from the table before rotating.
+    
+\end{frame}
+
+
+\begin{frame}{Task 3: Precision Placement Strategy}
+
+    To ensure accurate object placement, we adopted a \textbf{Relative Pose Replication} strategy rather than absolute coordinate planning.
+    
+    \vspace{0.3cm}
+
+    \begin{columns}
+        \begin{column}{0.6\textwidth}
+            \textbf{The Logic:}
+            \begin{itemize}
+                \item The robot records the exact \textbf{base-to-table distance} ($d_{ref}$) during the successful Grasp phase.
+                \item This distance is enforced as a constraint during the Placement phase to guarantee the \textbf{arm's kinematic reachability}.
+            \end{itemize}
+        \end{column}
+
+        \begin{column}{0.4\textwidth}
+            \begin{alertblock}{Why?}
+                Reusing the grasp pose relative to the base minimizes Inverse Kinematics (IK) errors and ensures the object lands exactly on the table surface.
+            \end{alertblock}
+        \end{column}
+    \end{columns}
 
     \vspace{0.1cm}
 
-    \begin{block}{The Problem}
-        After modifing the gripper and object frictions and compliance properties, we tried to implement a force grasp strategy by subscribing to the gripper's FT Sensor data. The gripper would close until a the 10N threshold was reached in the specific axis.
+    \begin{block}{Active Error Correction (Closed-Loop)}
+        Since AMCL localization has a margin of error ($>2cm$), the robot performs a final \textbf{Linear Approach/Backup} maneuver before placing: $$e = d_{real} - d_{ref}$$
+        
+        If $|e| > 1.0\text{cm}$: The base adjusts its position ($v_x = \pm 0.1 \text{m/s}$) until convergence.
     \end{block}
 
-    \begin{block}{The Solution}
-        We integrated the \textbf{Link Attacher Plugin} to enforce a rigid kinematic link between the robot and the object during transport.
-    \end{block}
+\end{frame}
 
-    \vspace{0.2cm}
-    \textbf{Implementation Cycle:}
-    \begin{enumerate}
-        \item \textbf{Grasp:} Gripper closes physically on the object.
-        \item \textbf{Lock:} Call \texttt{/ATTACHLINK} service $\rightarrow$ Object becomes part of the robot's TF tree.
-        \item \textbf{Transport:} Robot navigates to the place station.
-        \item \textbf{Release:} Gripper opens $\rightarrow$ Call \texttt{/DETACHLINK} service $\rightarrow$ Physics are restored to the object.
-    \end{enumerate}
+\begin{frame}{Task 3: Grasping Dynamics}
 
+    Mobile manipulation in physics engines (Gazebo/ODE) suffers from unreliable \textbf{contact dynamics} and friction simulation, often leading to object slippage during base motion.
+
+    \vspace{0.05em}
+
+    \begin{columns}[t] % [t] aligns columns at the top
+        \begin{column}{0.5\textwidth}
+            \begin{block}{Attempt 1: Force Control (Failed)}
+                We initially attempted a realistic grasp based on Force/Torque sensor feedback:
+                \begin{itemize}
+                    \item \textbf{Tuning:} Adjusted friction coefficients ($\mu$) and contact compliance ($k_p, k_d$).
+                    \item \textbf{Logic:} Stop gripper closure upon reaching a force threshold ($F_{th} = 10\text{N}$).
+                \end{itemize}
+                \textit{Outcome: Proven unreliable due to physics engine instability.}
+            \end{block}
+        \end{column}
+
+        \begin{column}{0.4\textwidth}
+            \begin{exampleblock}{Solution: Kinematic Locking}
+                To guarantee transport stability, we bypassed the physics engine using the \textbf{Link Attacher Plugin}.
+                \begin{itemize}
+                    \item \textbf{Mechanism:} Creates a rigid kinematic joint (Fixed Joint) between the gripper and the object.
+                    \item \textbf{Result:} Zero slippage and robust transport regardless of base accelerations.
+                \end{itemize}
+            \end{exampleblock}
+        \end{column}
+    \end{columns}
+
+\end{frame}
+
+
+\begin{frame}{Task 3: Grasping Video Result}
+    \begin{figure}
+        \centering
+        \href{https://liveunibo.sharepoint.com/sites/idughis/_layouts/15/stream.aspx?id=\%2Fsites\%2Fidughis\%2FShared\%20Documents\%2FGeneral\%2FMagistrale\%2FAMR\%2FVideos\%2FTask3\%2Emp4&referrer=StreamWebApp\%2EWeb&referrerScenario=AddressBarCopied\%2Eview\%2E031c688f\%2D4ee2\%2D4027\%2Da263\%2D01bcd7e963f8}{
+            \includegraphics[width=0.9\linewidth]{Thumb_task3.png} 
+        }
+        \caption{Manipulation Task Execution (Click to play in browser)}
+    \end{figure}
 \end{frame}

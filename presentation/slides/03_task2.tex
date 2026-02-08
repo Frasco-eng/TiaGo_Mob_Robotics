@@ -2,6 +2,64 @@
 % SECTION 3: TASK 2 - NAVIGATION
 % ==========================================
 \section{Task 2: Navigation}
+\label{sec: Task 2}
+
+\begin{frame}{Task 2: Autonomous Map Navigation}
+
+    \begin{block}{Objective}
+        Perform a \textbf{full autonomous navigation} of a \textbf{known environment} using the previously generated 2D occupancy grid map to find and record the pose of specific Aruco markers.
+        \begin{itemize}
+            \item \textbf{Pick Station Marker:} Aruco Marker ID 26, size 0.25m.
+            \item \textbf{Place Station Marker:} Aruco Marker ID 238, size 0.25m.
+        \end{itemize}
+    \end{block}
+
+    \vspace{0.1cm}
+
+    \begin{columns}
+        \begin{column}{0.45\textwidth}
+            \begin{figure}
+                \centering
+                % Screenshot di Gazebo con il robot che naviga verso un marker ArUco
+                \includegraphics[width=0.7\linewidth]{PickTable.png}
+                \caption{Pick Station Marker 26.}
+            \end{figure}
+        \end{column}
+
+        \begin{column}{0.45\textwidth}
+            \begin{figure}
+                \centering
+                % Screenshot di Gazebo con il robot che naviga verso un marker ArUco
+                \includegraphics[width=0.7\linewidth]{PlaceTable.png}
+                \caption{Place Station Marker 238.}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+\end{frame}
+
+\begin{frame}{Task 2: Navigation Trade-offs}
+
+    \begin{block}{Operational Challenges}
+        ArUco markers are attached to tables that may be located in corners or occluded areas.
+    \end{block}
+
+    \begin{center}
+        \large
+        \textbf{Strategic Trade-off: Search Logic}
+    \end{center}
+
+    \begin{alertblock}{Exhaustive Perimeter Search}
+        To locate the tables, we evaluated an \textit{exhaustive perimeter search} (wall-following) to systematically scan every corner.
+    \end{alertblock}
+    
+    \vspace{0.1cm}
+
+    \begin{exampleblock}{Probabilistic Heuristic (Naive Explorer)}
+        However, we opted for a \textbf{probabilistic heuristic}. By generating safe random goals within the free space, the robot covers the environment more rapidly than tracing the full perimeter, maintaining high detection reliability with lower execution time.
+    \end{exampleblock}
+
+\end{frame}
 
 % Slide 1: System Orchestration
 \begin{frame}{Task 2: System Architecture \& Orchestration}
@@ -9,7 +67,7 @@
     The complex behavior required for Task 2 is managed by a central \textbf{Coordinator Node} that acts as the high-level decision maker.
 
     \begin{columns}
-        \begin{column}{0.6\textwidth}
+        \begin{column}{0.5\textwidth}
             \begin{block}{The Coordinator Design}
                 \begin{itemize}
                     \item \textbf{Finite State Machine (FSM):} Strict transition logic between \textit{Exploring}, \textit{Tracking}, and \textit{Inspecting} states.
@@ -23,7 +81,7 @@
             \begin{figure}
                 \centering
                 % Qui starebbe benissimo un diagramma a stati (Init -> Exploring <-> Tracking -> Homing)
-                \includegraphics[width=\linewidth]{placeholder.png}
+                \includegraphics[width=\linewidth]{task2_state_machine.png}
                 \caption{State Machine Logic}
             \end{figure}
         \end{column}
@@ -33,13 +91,12 @@
 
 % Slide 2: Global Localization
 \begin{frame}{Task 2: Global Localization}
-
-    Since the robot spawns in an unknown location, standard AMCL localization is insufficient immediately after startup. We implemented a robust initialization routine.
-    \begin{columns}
+    Since the robot starts in an unknown location on the map, we implemented a global localization routine exploiting the Adaptive Monte Carlo Localization (AMCL).
+    \begin{columns}[c]
         \begin{column}{0.6\textwidth}
             \begin{block}{The Converge Strategy:}
                 \begin{enumerate}
-                    \item \textbf{Particle Spread:} Trigger \texttt{/reinitialize\_global\_localization} to distribute AMCL particles uniformly across the map.
+                    \item \textbf{Particle Spread:} Trigger \texttt{/reinitialize\_global\\\_localization} to distribute AMCL particles uniformly across the map.
                     \item \textbf{Data Gathering:} The robot executes a $360^\circ$ in-place rotation at $1.0$ rad/s to feed the laser scan matcher.
                     \item \textbf{Covariance Check:} The routine continuously monitors the pose covariance matrix, ensuring it falls below strict thresholds before allowing any movement.
                 \end{enumerate}
@@ -50,13 +107,13 @@
             \begin{figure}
                 \centering
                 % Screenshot di RViz con le particelle AMCL sparse
-                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
-                \caption{AMCL Particle Convergence}
+                \includegraphics[width=0.7\linewidth]{Convergence2.png}
             \end{figure}
+
             \begin{figure}
                 \centering
                 % Grafico che mostra la diminuzione della covarianza nel tempo durante l'inizializzazione
-                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \includegraphics[width=1.0\linewidth]{covariance_plot.png}
                 \caption{Covariance Reduction Over Time}
             \end{figure}
         \end{column}
@@ -82,22 +139,18 @@
         \begin{column}{0.5\textwidth}
             \begin{figure}
                 \centering
-                % Screenshot della mappa con frame del task 2, con i goal in verde e i frame
-                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \includegraphics[width=0.8\linewidth, height=2.5cm, keepaspectratio]{exploration_map.png}
                 \caption{Clearance-Based Goal Sampling}
             \end{figure}
 
             \begin{figure}
                 \centering
-                % Screenshot di RViz con il robot che naviga verso un goal random sicuro
-                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{RandomNav2.png}
                 \caption{Random Safe Goal Navigation}
             \end{figure}
         \end{column}
     \end{columns}
-
     
-
     \vspace{0.1cm}
 
 \end{frame}
@@ -115,20 +168,20 @@
 
     \begin{columns}
         
-        \begin{column}{0.33\textwidth}
+        \begin{column}{0.45\textwidth}
             \begin{figure}
                 \centering
                 % Screenshot di RViz con il robot che segue un marker ArUco con la  testa bassa e la camera che inquadrano il marker
-                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \includegraphics[width=0.8\linewidth, height=3cm, keepaspectratio]{ArucoTracking2.png}
                 \caption{Aruco Tracking Behavior}
             \end{figure}
         \end{column}
 
-        \begin{column}{0.33\textwidth}
+        \begin{column}{0.45\textwidth}
             \begin{figure}
                 \centering
                 % Screenshot di RViz con il robot che guarda il marker arrivato alla stazione
-                \includegraphics[width=0.8\linewidth, height=2cm, keepaspectratio]{placeholder.png}
+                \includegraphics[width=0.8\linewidth, height=3cm, keepaspectratio]{ArucoInspection.png}
                 \caption{Aruco Inspecting Behavior}
             \end{figure}
         \end{column}
@@ -157,7 +210,11 @@
 \begin{frame}{Task 2: Navigation Video Result}
     \begin{figure}
         \centering
-        \includegraphics[width=0.6\linewidth]{placeholder.png}
-        \caption{Video Placeholder - Link to YouTube or local file.}
+        % Ho aggiunto \ davanti a tutti i % nel link qui sotto:
+        \href{https://liveunibo.sharepoint.com/sites/idughis/_layouts/15/stream.aspx?id=\%2Fsites\%2Fidughis\%2FShared\%20Documents\%2FGeneral\%2FMagistrale\%2FAMR\%2FVideos\%2FTask2\%2Emp4&referrer=StreamWebApp\%2EWeb&referrerScenario=AddressBarCopied\%2Eview\%2E3889980f\%2D8794\%2D46a6\%2Db554\%2D9371fc06f370}{
+            % Ho cambiato 0.2 in 0.7, altrimenti l'immagine è minuscola
+            \includegraphics[width=0.9\linewidth]{Thumb_task2.png}
+        }
+        \caption{Navigation Task Execution (Click to play in browser)}
     \end{figure}
 \end{frame}
