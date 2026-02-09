@@ -1,3 +1,6 @@
+##################################
+# Imports
+##################################
 import os
 from ament_index_python.packages import get_package_share_directory
 import cv2
@@ -78,7 +81,7 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
             raise FileNotFoundError(f"Map Image not found: {pgm_path}")
 
 
-        # Threshold the image to binary (Free: 255, Occupied: 0)
+        # Threshold the image 
         _, binary_map = cv2.threshold(img, 250, 255, cv2.THRESH_BINARY)
 
         # Compute distance transform
@@ -96,10 +99,10 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         if not os.path.exists(temp_dir_path):
             os.makedirs(temp_dir_path)
         
-        # If no safe pixels found, relax clearance requirement
+      
         if not whitelist_pixels:
             print("No safe pixels found! Reducing clearance requirements...")
-            # Fallback: find the max distance available if requested clearance is too high
+            
             max_dist = np.max(dist_map)
             safe_indices = np.where(dist_map >= max_dist * 0.9)
             whitelist_pixels = list(zip(safe_indices[0], safe_indices[1]))
@@ -114,38 +117,35 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         
         world_theta = random.uniform(-math.pi, math.pi) 
         
-        # --- DEBUG SECTION START ---
         # Create a 3-channel BGR image for colorful markers
         debug_img_bgr = cv2.cvtColor(binary_map, cv2.COLOR_GRAY2BGR)
 
-        # A. Highlight Safe Zone (Light Green)
+        # Highlight Safe Zone 
         for r, c in whitelist_pixels:
             debug_img_bgr[r, c] = [200, 255, 200] 
 
-        # B. Draw OpenCV Origin & Axes (Top-Left)
         # CV Origin is (0,0). X is Col (Right), Y is Row (Down)
         cv2.circle(debug_img_bgr, (5, 5), 5, (0, 0, 255), -1) 
         cv2.arrowedLine(debug_img_bgr, (5, 5), (55, 5), (0, 0, 255), 2, tipLength=0.3)  # Red X
         cv2.arrowedLine(debug_img_bgr, (5, 5), (5, 55), (0, 255, 0), 2, tipLength=0.3)  # Green Y
         cv2.putText(debug_img_bgr, "CV Origin", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-        # C. Draw ROS World Origin & Axes
         ros_origin_px_x = int((0.0 - origin[0]) / resolution)
         ros_origin_px_y = int(height - ((0.0 - origin[1] - safe_coords[1]) / resolution))
 
         cv2.drawMarker(debug_img_bgr, (ros_origin_px_x, ros_origin_px_y), 
                     (255, 0, 0), cv2.MARKER_CROSS, 20, 1)
         
-        # Length of axis in pixels (e.g., 1 meter)
+        # Length of axis in pixels 
         axis_len_px = int(1.0 / resolution)
 
-        # Draw ROS X Axis (Blue) -> Points Right
+        # ROS X axis
         cv2.arrowedLine(debug_img_bgr, 
                         (ros_origin_px_x, ros_origin_px_y), 
                         (ros_origin_px_x + axis_len_px, ros_origin_px_y), 
                         (0, 0, 255), 2, tipLength=0.3)
         
-        # Draw ROS Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
+        # ROS Y axis 
         cv2.arrowedLine(debug_img_bgr, 
                         (ros_origin_px_x, ros_origin_px_y), 
                         (ros_origin_px_x, ros_origin_px_y - axis_len_px), 
@@ -155,7 +155,7 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
                     (ros_origin_px_x + 10, ros_origin_px_y - 10), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         
-        # D. Mark Selected Spawn Point (Yellow)
+        # Mark Selected Spawn Point 
         cv2.drawMarker(debug_img_bgr, (pixel_c, pixel_r), 
                     (0, 0, 0), cv2.MARKER_STAR, 20, 1)
         
@@ -168,7 +168,6 @@ def map_pose_random_generator(map_path, safe_coords=[0.0, -1.3, 0.0, 0.0], clear
         cv2.imwrite(debug_image_path, debug_img_bgr)
         
         print(f"Debug spawn map saved to: {debug_image_path}")
-        # --- DEBUG SECTION END ---
 
         return [world_x, world_y, 0.0, world_theta]
     

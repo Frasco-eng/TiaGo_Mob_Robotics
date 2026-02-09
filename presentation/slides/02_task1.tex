@@ -5,7 +5,7 @@
 \begin{frame}{Task 1: Autonomous Map Generation}
 
     \begin{block}{Objective}
-        Perform a \textbf{full autonomous exploration} of \textbf{an unknown environment} to generate a consistent 2D occupancy grid map using SLAM.
+        Perform a \textbf{full autonomous exploration} of \textbf{an unknown environment} to generate a consistent 2D occupancy grid map using SLAM
     \end{block}
 
     \vspace{0.1cm}
@@ -14,11 +14,11 @@
         \begin{column}{0.55\textwidth}
             \textbf{Environmental Challenges}
             \par
-            The testing environment presents specific difficulties that standard configuration could not handle:
+            The testing environment presents \textbf{specific difficulties} that standard configuration\footnote{Default SLAM and navigation parameters} could not handle:
             \vspace{0.2cm}
             \begin{itemize}
-                \item \textbf{Complex Geometry:} Narrow passages and obstacles requiring precise maneuvering.
-                \item \textbf{Lighting Artifacts:} Strong shadows created false positive obstacles in the LIDAR readings (ghost objects).
+                \item \textbf{Complex Geometry:} Narrow passages and obstacles requiring precise maneuvering
+                \item \textbf{Lighting Artifacts:} Strong shadows created false positive obstacles in the LIDAR readings (ghost objects)
             \end{itemize}
         \end{column}
 
@@ -26,7 +26,7 @@
             \begin{figure}
                 \centering
                 \includegraphics[width=0.6\linewidth]{kitchen_table.png}
-                \caption{Environment in Gazebo 11.}
+                \caption{Environment in Gazebo 11}
             \end{figure}
         \end{column}
     \end{columns}
@@ -36,23 +36,23 @@
 
 \begin{frame}{Task 1: Exploration Strategy}
 
-    To achieve efficient coverage, we integrated a C++ node based on \texttt{m-explore}, enhancing the standard frontier exploration logic.
+    To achieve efficient coverage, we integrated a C++ node based on \texttt{m-explore}, enhancing the standard \textbf{frontier exploration logic}.
 
     \vspace{0.3cm}
 
     \begin{exampleblock}{Optimized Frontier Selection Logic}
-        Instead of a greedy approach, we tuned the cost function parameters to prioritize frontiers that are:
+        We tuned the cost function parameters to prioritize frontiers that are:
         \begin{enumerate}
-            \item \textbf{Closer} to the robot's current pose (minimizing travel time).
-            \item Located in \textbf{larger unexplored voids} (maximizing information gain).
+            \item \textbf{Closer} to the robot's current pose (minimizing travel time)
+            \item Located in \textbf{larger unexplored voids} (maximizing information gain)
         \end{enumerate}
     \end{exampleblock}
 
     \vspace{0.3cm}
     
-    \textbf{Completion Workflow:}
+    \textbf{Completion Workflow}
     \par
-    Upon exhaustion of the whitelist frontiers, the robot automatically navigates back to the \textbf{Home Position} and triggers the map saver, storing the result in the \texttt{maps/} directory.
+    Upon exhaustion of the whitelist frontiers, the robot automatically navigates back to the \textbf{Home Position} and triggers the \textbf{map saver node}, storing the result in the \texttt{maps/} directory.
 
 \end{frame}
 
@@ -62,7 +62,7 @@
     \begin{columns}
         \begin{column}{0.5\textwidth}
             \begin{alertblock}{Safety Measure: Pre-Exploration Configuration}
-                Before moving, the system executes a mandatory \textbf{Tuck Arm} procedure. Folding the arm into a safe configuration minimizes the robot's footprint, preventing collisions with low obstacles or door frames during autonomous navigation.
+                Before moving, the system executes a mandatory \textbf{Tuck Arm} procedure. Folding the arm into a safe configuration minimizes the robot's footprint, preventing collisions with obstacles during autonomous navigation.
             \end{alertblock}
         \end{column}
 
@@ -76,40 +76,45 @@
     \end{columns}
     
     \vspace{0.5cm}
-    This configuration is also considered in the navigation for Task 2 and Task 3 as safe Pose.
+    This configuration is also used for Task 2 and Task 3 navigation.
 
     
 
 \end{frame}
 
-
-
-\begin{frame}{Task 1: System Configuration}
+\begin{frame}{Task 1: Navigation Stack Architecture}
 
     \begin{columns}
-        \begin{column}{0.55\textwidth}
-            \textbf{Sensor \& Navigation Tuning}
-            \par
-            We refined the navigation stack parameters to address the environmental noise:
+        \begin{column}{0.65\textwidth}
+            \textbf{Critical System Enhancements}
+            \vspace{0.5em}
             \begin{itemize}
-                \item \textbf{LIDAR Raytracing:} Adjusted strictly to filter out shadow reflections and prevent "ghost obstacles" on the map.
-                \item \textbf{Motion Profile:} Smoothed acceleration limits to ensure stable mapping and prevent odometry drift.
-                \item \textbf{Cost Map Parameters:} %TODO - Add this part
+                \setlength\itemsep{0.8em} % Increases space between items for readability
+                
+                \item \textbf{Controller Logic Injection:} 
+                Implemented \texttt{RotationShimController} to enforce precise in-place rotation, eliminating erratic spiraling in tight spaces
+                
+                \item \textbf{Map Integrity Verification:} 
+                Tightened SLAM loop-closure thresholds to reject weak scan matches and prevent long-term map corruption
+                
+                \item \textbf{Safety Gradient Tuning:} 
+                Adjusted the inflation decay to create a steeper potential field, actively repelling the planner from obstacles
+                
+               \item \textbf{Artifact Clearing:} 
+                Extended raytracing and enforced height thresholds to aggressively filter floor reflections and "ghost" obstacles
             \end{itemize}
         \end{column}
 
-        \begin{column}{0.45\textwidth}
+        \begin{column}{0.35\textwidth}
             \begin{figure}
                 \centering
-                \includegraphics[width=0.8\linewidth]{Costmap.png}
-                \caption{Generated Occupancy Grid}
+                \includegraphics[width=\linewidth]{Costmap.png}
+                \caption{Optimized Occupancy Gradient}
             \end{figure}
         \end{column}
     \end{columns}
 
 \end{frame}
-
-
 \begin{frame}{Task 1: Exploration Video Result}
     \begin{figure}
         \centering

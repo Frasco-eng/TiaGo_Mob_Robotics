@@ -9,6 +9,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from std_srvs.srv import Empty
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 # Python Libraries
 import time
@@ -16,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-# Custom Imports (Assuming this module exists in your environment)
+# Custom Imports
 from tiago_exam import utils
 
 ##################################
@@ -33,12 +34,18 @@ class GlobalLocalizationNode(Node):
         super().__init__('global_localization_node')
 
         ##################################
+        # Callback Group
+        ##################################
+        self.callback_group = ReentrantCallbackGroup()
+
+        ##################################
         # Parameters & Path Setup
         ##################################
         # Resolve the path dynamically using the utils module
         try:
             ws_src_dir = utils.get_package_src_directory('tiago_exam')
             path_dir = os.path.join(ws_src_dir, 'temp')
+
             # Ensure the directory exists
             if not os.path.exists(path_dir):
                 os.makedirs(path_dir)
@@ -63,28 +70,27 @@ class GlobalLocalizationNode(Node):
         ##################################
         # Subscribers
         ##################################
-        # AMCL callback now handles logging and plotting directly
-        self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_callback, qos_profile)
+        self.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', self.amcl_callback, qos_profile, callback_group=self.callback_group)
         
         ##################################
         # Publishers
         ##################################
-        self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10, callback_group=self.callback_group)
         
         ##################################
         # Service Clients
         ##################################
-        self.global_loc_client = self.create_client(Empty, '/reinitialize_global_localization')
+        self.global_loc_client = self.create_client(Empty, '/reinitialize_global_localization', callback_group=self.callback_group)
 
         ##################################
         # Thresholds and Flags
         ##################################
-        self.pos_threshold = 0.03               # Variance X and Y
-        self.yaw_threshold = 0.03               # Variance Yaw
-        self.max_attempt_before_reset = 7       
+        self.pos_threshold = 0.03               # Variance Threshold X and Y
+        self.yaw_threshold = 0.03               # Variance Threshold Yaw
+        self.max_attempt_before_reset = 7       # Max rotation attempts before resetting particles
         
-        self.amcl_pose_received = False
-        self.current_covariance = []
+        self.amcl_pose_received = False         # Flag to check if we have received any AMCL pose yet
+        self.current_covariance = []            # Store the covariance history
 
         # Data Logging for Plotting
         self.log_var_x = []
@@ -110,12 +116,17 @@ class GlobalLocalizationNode(Node):
         """
         Callback for AMCL pose updates.
         Logs data and updates the plot on every message received.
+
+        Parameters
+        ----------
+        msg : PoseWithCovarianceStamped
+            The incoming message containing the pose and covariance information.
         """
         self.amcl_pose_received = True
         self.current_covariance = msg.pose.covariance
 
         # Extract variances
-        # Covariance matrix is 6x6 (36 elements). Index 0=X, 7=Y, 35=Yaw
+        # Index 0=X, 7=Y, 35=Yaw
         var_x = self.current_covariance[0]
         var_y = self.current_covariance[7]
         var_yaw = self.current_covariance[35]
@@ -127,10 +138,7 @@ class GlobalLocalizationNode(Node):
         self.log_var_y.append(var_y)
         self.log_var_yaw.append(var_yaw)
 
-        # Trigger Plot Update (Real-time tracking)
-        # Note: Saving a file every callback can be heavy. 
-        # If AMCL is very fast (>10Hz), consider plotting every Nth message.
-        # For now, we plot every message as requested.
+        # Save covariance plot on every update
         self.save_covariance_plot()
 
     ##################################
@@ -170,7 +178,7 @@ class GlobalLocalizationNode(Node):
             
             self.rotate()
             
-            # Spin to ensure callbacks are processed (and plots updated)
+            # Spin to ensure callbacks are processed 
             for _ in range(10):
                 rclpy.spin_once(self, timeout_sec=0.1)
 
@@ -184,7 +192,13 @@ class GlobalLocalizationNode(Node):
             attempt += 1
 
     def rotate(self) -> None:
+        """
+        Rotates the robot in place to help AMCL converge.
+        """
+        # Create Twist message 
         vel_msg = Twist()
+
+        # Set angular velocity for rotation
         vel_msg.angular.z = ROTATION_VELOCITY
         duration = abs(TWO_PI / ROTATION_VELOCITY)
         freq = 10.0
@@ -193,7 +207,7 @@ class GlobalLocalizationNode(Node):
         
         while (self.get_clock().now() - start_time).nanoseconds / 1e9 < duration:
             self.vel_pub.publish(vel_msg)
-            # Spin is crucial here: it triggers amcl_callback -> saves plot
+            
             rclpy.spin_once(self, timeout_sec=0.1)
             time.sleep(1.0 / freq)
         
@@ -202,6 +216,9 @@ class GlobalLocalizationNode(Node):
         time.sleep(1.0)
         
     def stop(self) -> None:
+        """
+        Stops the robot by publishing zero velocities.
+        """
         vel_msg = Twist()
         self.vel_pub.publish(vel_msg)
     
@@ -213,12 +230,14 @@ class GlobalLocalizationNode(Node):
             self.get_logger().warn('No AMCL pose received yet.')
             return False
         
+        # Extract variances
         var_x = self.current_covariance[0]
         var_y = self.current_covariance[7]
         var_yaw = self.current_covariance[35]
 
         self.get_logger().info(f'Current Variances -> X: {var_x:.4f}, Y: {var_y:.4f}, Yaw: {var_yaw:.4f}')
 
+        # Return True if all variances are below thresholds
         if (var_x < self.pos_threshold and 
             var_y < self.pos_threshold and 
             var_yaw < self.yaw_threshold):
@@ -254,6 +273,7 @@ class GlobalLocalizationNode(Node):
             
         except Exception as e:
             self.get_logger().error(f'Failed to update plot: {str(e)}')
+
 
 ##################################
 # Main Function

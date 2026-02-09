@@ -22,12 +22,12 @@ from tiago_exam_interfaces.msg import HeadPose
 import math
 
 ##################################
-# Aruco Noter Node
+# Aruco Tracker Node
 ##################################
-class ArucoNoter(Node):
+class ArucoTracker(Node):
 
     def __init__(self):
-        super().__init__('aruco_noter')
+        super().__init__('aruco_tracker')
 
         ##################################
         # Callback Group
@@ -39,7 +39,7 @@ class ArucoNoter(Node):
         ##################################
         self.head_pan_joint_name = "head_1_joint"
         self.head_tilt_joint_name = "head_2_joint"
-        self.approach_distance = 0.4 # Meters in front of the marker
+        self.approach_distance = 0.3    # Meters in front of the marker
 
         ##################################
         # State Variables
@@ -75,7 +75,7 @@ class ArucoNoter(Node):
         self.real_marker_pub = self.create_publisher(PoseStamped, 'detected_marker_real_pose', 10, callback_group=self.callback_group)
         self.move_head_pub = self.create_publisher(HeadPose, 'head_pose', 10, callback_group=self.callback_group)
 
-        self.get_logger().info("Aruco Noter Node Started.")
+        self.get_logger().info("Aruco Tracker Node Started.")
 
     ##################################
     # Callbacks
@@ -144,7 +144,7 @@ class ArucoNoter(Node):
         base_T_camera_kdl = self.transform_stamped_to_kdl(base_T_camera_ts)
         map_T_base_kdl = self.transform_stamped_to_kdl(map_T_base_ts)
 
-        # Transform Chain: Map -> Base -> Camera -> Marker
+        # Transform Chain
         map_T_marker_kdl = map_T_base_kdl * base_T_camera_kdl * camera_T_marker_kdl
         
         real_pose_msg = self.kdl_to_pose_msg(map_T_marker_kdl, self.map_frame_name)
@@ -169,26 +169,22 @@ class ArucoNoter(Node):
         nav_goal_msg.header.frame_id = marker_frame_name
         self.nav_goal_pub.publish(nav_goal_msg)
 
-        # ---------------------------------------------------------
-        # --- Head Tracking Logic (Relative to Current Position) ---
-        # ---------------------------------------------------------
         
         #############
-        # Get RAW coordinates in Optical Frame
+        # Raw coordinates in Optical Frame
         #############
-        # Standard: X=Right, Y=Down, Z=Forward
+        # X=Right, Y=Down, Z=Forward
         raw_x = camera_T_marker_kdl.p.x()
         raw_y = camera_T_marker_kdl.p.y()
         raw_z = camera_T_marker_kdl.p.z()
 
         #############
-        # Calculate Angular Error (Deltas)
+        # Angular Error
         #############
-        # Pan Delta: Angle on the X-Z plane
-        # If X is positive (right), we need to turn Right.
+        # Pan Angle on the X-Z plane
         delta_pan = math.atan2(raw_x, raw_z)
 
-        # Tilt Delta: Angle on the Y-Z plane (using ground distance)
+        # Tilt Angle on the Y-Z plane 
         d_ground = math.sqrt(raw_x**2 + raw_z**2)
         delta_tilt = math.atan2(raw_y, d_ground)
 
@@ -196,10 +192,10 @@ class ArucoNoter(Node):
         # Apply to Current Joint Positions
         #############
         # NOTE on Signs:
-        # Pan: +Left / -Right. Since 'raw_x' is +Right, we ADD the delta.
+        # Pan: +Left / -Right
         cmd_pan = self.current_pan - delta_pan
         
-        # Tilt: +Down / -Up. Since 'raw_y' is +Down, we ADD the delta.
+        # Tilt: +Down / -Up
         cmd_tilt = self.current_tilt - delta_tilt
 
         #############
@@ -292,7 +288,7 @@ class ArucoNoter(Node):
 ##################################
 def main(args=None):
     rclpy.init(args=args)
-    node = ArucoNoter()
+    node = ArucoTracker()
 
     executor = MultiThreadedExecutor()
     executor.add_node(node)

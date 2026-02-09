@@ -25,6 +25,7 @@ from launch.actions import (
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
 
 
 def navigation_bringup(context, *args, **kwargs):
@@ -37,7 +38,10 @@ def navigation_bringup(context, *args, **kwargs):
     #pmb2_maps = get_package_share_directory("pmb2_maps")
     nav2_bringup = get_package_share_directory("nav2_bringup")
 
+
     if is_public_sim == "True" or is_public_sim == "true":
+   
+        
         nav2_bringup_launch = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(nav2_bringup, "launch", "bringup_launch.py")
@@ -64,8 +68,9 @@ def navigation_bringup(context, *args, **kwargs):
             condition=IfCondition(is_public_sim),
         )
 
-        actions.append(nav2_bringup_launch)
-        actions.append(rviz_bringup_launch)
+        
+        actions.extend([nav2_bringup_launch, rviz_bringup_launch])
+        
     else:
         pal_nav2_bringup = get_package_share_directory("pal_navigation_cfg_bringup")
         pal_nav2_bringup_launch = IncludeLaunchDescription(

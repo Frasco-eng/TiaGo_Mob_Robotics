@@ -122,13 +122,13 @@ def launch_setup(context, *args, **kwargs):
     # Coordinates
     safe_coords = [0.0, -1.3, 0.0, 0.0]  
     coordinates = utils.map_pose_random_generator(map_path, safe_coords=safe_coords, clearance=1.0, task_name='task3')
-    #coordinates = [-1.1, -4.0, 0.0, 3.14]
+    coordinates = [-1.1, -4.0, 0.0, 3.14]
 
     ##############
     # Launch Descriptions
     ##############
 
-    # Gazebo launch (launch the gazebo simulator with the world_name argument for the world selection)
+    # Gazebo launch 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
             get_package_share_directory('tiago_exam_worlds'),
@@ -136,33 +136,33 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={'world_name': LaunchConfiguration("world_name")}.items()
     )
 
-    # Tiago spawn launch (spawn the robot in gazebo at pick location)
+    # Tiago spawn launch 
     tiago_spawn = include_launch_py_description(
         'tiago_exam', ['launch', 'tiago_spawn.launch.py'],
         launch_arguments={'use_sim_time': 'True', 'x': str(coordinates[0]), 'y': str(coordinates[1]), 'z': f'{coordinates[2]}', 'yaw': f'{coordinates[3]}'}.items())
 
-    # Tiago bringup launch (load the robot state publisher and controllers)
+    # Tiago bringup launch 
     tiago_bringup = include_launch_py_description(
         'tiago_bringup', ['launch', 'tiago_bringup.launch.py'],
         launch_arguments={'use_sim_time': 'True'}.items())
     
-    # Tiago nav bringup launch (load the navigation2 stack)
+    # Tiago nav bringup launch 
     tiago_nav_bringup = include_launch_py_description(
         'tiago_2dnav', ['launch', 'tiago_nav_bringup.launch.py'],
         launch_arguments={'use_sim_time' : 'True', 'is_public_sim' : 'True', 'rviz' : 'True', 'map_path' : map_path ,'world_name': LaunchConfiguration("world_name")}.items())
 
-    # Moveit2 bringup launch (load the MoveIt2 stack)
+    # Moveit2 bringup launch 
     move_group = include_launch_py_description(
         'tiago_moveit_config', ['launch', 'move_group.launch.py'],
         launch_arguments={
             'use_sim_time': 'True',
-            'arm_type': 'tiago-arm',        # Selects 'tiago' (vs 'no-arm')
+            'arm_type': 'tiago-arm',        # Selects 'tiago' 
             'end_effector': 'pal-gripper',  # Selects 'pal-gripper'
             'ft_sensor': 'schunk-ft',       # Selects 'schunk-ft'
         }.items(),
         condition=IfCondition('True'))
 
-    # Tuck arm launch (load the tuck arm node to avoid collisions with the environment)
+    # Tuck arm launch 
     tuck_arm = Node(package='tiago_exam',
                     executable='tuck_arm',
                     emulate_tty=True,
@@ -220,7 +220,7 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
-    # Coordinator node (main state machine for task3)
+    # Coordinator node 
     coordinator = Node(
         package='tiago_exam',
         executable='coordinator_task3',
@@ -229,11 +229,12 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{
             'use_sim_time': True,
             'marker_file_path': marker_file_path,
-            'map_path': map_path
+            'map_path': map_path,
+            'cube_size': 0.07
         }]
     )
 
-    # Map Navigator node (handles navigation to pick and place locations)
+    # Map Navigator node 
     map_navigator = Node(
         package='tiago_exam',
         executable='map_navigator',
@@ -242,7 +243,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
 
-    # Manipulator node (state machine for grasp and release)
+    # Manipulator node 
     manipulator = Node(
         package='tiago_exam',
         executable='manipulator',
@@ -251,7 +252,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}]
     )
 
-    # Head Motion node (handles head movements)
+    # Head Motion node
     head_motion = Node(
         package='tiago_exam',
         executable='head_motion',
@@ -259,11 +260,24 @@ def launch_setup(context, *args, **kwargs):
         output='both',
         parameters=[{'use_sim_time': True}]
     )
+    
+    
+    
 
+    def on_tuck_exit(event, context):
+        if event.returncode == 0:
+            print("Tuck arm SUCCESS. Starting exploration...")
+            return [localization]
+        else:
+            print("Tuck arm FAILED. Exploration aborted.")
+            return [] # Return empty list to do nothing
+
+    
+    # Start localization after tuck arm ends
     event_handler_tuck_to_localization = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=tuck_arm,
-            on_exit=[localization],
+            on_exit=on_tuck_exit,
         )
     )
 
@@ -317,3 +331,16 @@ def generate_launch_description():
     ld.add_action(OpaqueFunction(function=launch_setup))
 
     return ld
+
+    #############################
+    # OVERALL STRUCTURE FOR TASK3
+    #############################
+    # 1. Launch Gazebo with the specified world.
+    # 2. Spawn the Tiago robot at a random location in the map.
+    # 3. Launch the necessary bringup files for Tiago, including navigation and MoveIt.
+    # 4. Tuck the robot's arm after a short delay to ensure it doesn't collide with the environment during initialization.
+    # 5. Start the localization node once the arm is tucked.
+    # 6. Start the coordinator, map navigator, manipulator, and head motion nodes after localization is complete.
+    # 7. The coordinator will manage the overall task execution, including navigation to the cubes, picking them up, and placing them at the target location while avoiding the red zone. 
+    # The ArUco detectors will provide the necessary information about the cube positions to the coordinator. 
+    

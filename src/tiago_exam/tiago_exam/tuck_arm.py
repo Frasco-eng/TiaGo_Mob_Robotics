@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -14,8 +15,7 @@ class ArmTucker(Node):
         # We connect to MoveIt (move_group) instead of play_motion2
         self._action_client = ActionClient(self, MoveGroup, 'move_action')
         
-        # Define the 'home' (tucked) position for TIAGo
-        # These are the standard joint values for safely tucking the arm
+        # home position for TIAGo's arm
         self.home_joints = [0.20, -1.34, -0.20, 1.94, -1.57, 1.37, 0.00]
         self.joint_names = [
             'arm_1_joint', 'arm_2_joint', 'arm_3_joint', 
@@ -80,7 +80,7 @@ class ArmTucker(Node):
     def get_result_callback(self, future):
         result = future.result().result
         
-        # Error code 1 means SUCCESS
+        # Error 1 is success
         if result.error_code.val == 1:
             self.get_logger().info('Arm TUCKED successfully!')
             self.success = True
@@ -103,21 +103,30 @@ def main(args=None):
         # Trigger the async action
         node.tuck_arm()
 
-        # Process events manually until the node reports it's done
+        # Process events until the done
         while not node.processing_done and rclpy.ok():
-            rclpy.spin_once(node, timeout_sec=0.1)
+            rclpy.spin_once(node, timeout_sec=1.0)
 
         # Check result
         if node.success:
             final_success = True
             break
-        
+            
         node.get_logger().warn(f'Retrying... ({i+1}/3)')
         
     if final_success:
-        node.get_logger().info('Success! Holding node alive to maintain state (optional)...')
+        node.get_logger().info('Success! Arm is tucked.')
+        # Exit with success
+        node.destroy_node()
+        rclpy.shutdown()
+        sys.exit(0)
     else:
         node.get_logger().error('All tuck attempts failed.')
+        # Exit with failure
+        node.destroy_node()
+        rclpy.shutdown()
+        sys.exit(1)
+   
 
     node.destroy_node()
     rclpy.shutdown()

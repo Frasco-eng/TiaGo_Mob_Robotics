@@ -89,6 +89,8 @@ def get_resource_paths(packages_names: list[str]) -> str:
 
     return resource_paths
 
+
+
 ##################################
 # Launch Setup
 ##################################
@@ -120,7 +122,7 @@ def launch_setup(context, *args, **kwargs):
     # Launch Descriptions
     ##############
     
-    # Gazebo launch (launch the gazebo simulator with the world_name argument for the world selection)
+    # Gazebo launch 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
             get_package_share_directory('tiago_exam_worlds'),
@@ -128,17 +130,17 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={'world_name': LaunchConfiguration("world_name")}.items()
     )
 
-    # Tiago spawn launch (spawn the robot in gazebo)
+    # Tiago spawn launch 
     tiago_spawn = include_launch_py_description(
         'tiago_exam', ['launch', 'tiago_spawn.launch.py'],
         launch_arguments={'use_sim_time': 'True'}.items())
 
-    # Tiago bringup launch (load the robot state publisher and controllers)
+    # Tiago bringup launch 
     tiago_bringup = include_launch_py_description(
         'tiago_bringup', ['launch', 'tiago_bringup.launch.py'],
         launch_arguments={'use_sim_time': 'True'}.items())
 
-    # Moveit2 bringup launch (load the MoveIt2 stack)
+    # Moveit2 bringup launch 
     move_group = include_launch_py_description(
         'tiago_moveit_config', ['launch', 'move_group.launch.py'],
         launch_arguments={
@@ -149,12 +151,12 @@ def launch_setup(context, *args, **kwargs):
         }.items(),
         condition=IfCondition('True'))
 
-    # Tiago nav bringup launch (load the navigation2 stack)
+    # Tiago nav bringup launch 
     tiago_nav_bringup = include_launch_py_description(
         'tiago_2dnav', ['launch', 'tiago_nav_bringup.launch.py'],
         launch_arguments={'use_sim_time': 'True', 'is_public_sim': 'True', 'rviz' : 'True', 'slam': 'True', 'world_name': LaunchConfiguration("world_name")}.items())
 
-    # Explore lite launch (load the explore_lite package for autonomous exploration)
+    # Explore lite launch 
     explore_lite = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
         get_package_share_directory('explore_lite'), 'launch'),
@@ -163,26 +165,37 @@ def launch_setup(context, *args, **kwargs):
         'use_sim_time': 'True'}.items(),
     )
 
-    # Tuck arm launch (load the tuck arm node to avoid collisions with the environment)
+    # Tuck arm launch 
     tuck_arm = Node(package='tiago_exam',
                     executable='tuck_arm',
                     emulate_tty=True,
                     output='both',
                     parameters=[{'use_sim_time': True}])
+    
+   
 
     delayed_tuck_arm = TimerAction(
         period=8.0,
         actions=[tuck_arm]
     )
+    
+    def on_tuck_exit(event, context):
+        if event.returncode == 0:
+            print("Tuck arm SUCCESS. Starting exploration...")
+            return [explore_lite]
+        else:
+            print("Tuck arm FAILED. Exploration aborted.")
+            return [] # Return empty list to do nothing
+
         
     event_handler_tuck_to_explore = RegisterEventHandler(  
             event_handler=OnProcessExit(
                 target_action=tuck_arm,
-                on_exit=[explore_lite],
+                on_exit=on_tuck_exit,
             )
         )
 
-    # Substitute the map_saver_watcher node to monitor the robot's exploration and save the map when done
+    # Map watcher node to monitor exploration and save the map
     map_watcher_node = Node(
         package='tiago_exam',
         executable='map_saver_watcher',
@@ -205,7 +218,7 @@ def generate_launch_description():
     Generate the launch description for the Tiago exam task 1.
     '''
 
-    # Set the GAZEBO_MODEL_PATH and GAZEBO_RESOURCE_PATH environment variables by aggregating paths from relevant packages
+    # Aggregating paths from relevant packages
     packages = ['tiago_description', 'pmb2_description',
                 'pal_hey5_description', 'pal_gripper_description',
                 'pal_robotiq_description']
@@ -224,12 +237,12 @@ def generate_launch_description():
     ld = LaunchDescription()
     
     # Declare launch arguments
-    ld.add_action(DeclareLaunchArgument( # used to select the world to load in Gazebo without having to specify
+    ld.add_action(DeclareLaunchArgument( # Select the world to load in Gazebo 
         'world_name',
         default_value='group29',
         description='Name of the Gazebo world to load'))
     
-    ld.add_action(DeclareLaunchArgument( # used to select the map to load for navigation2 and saving without having to specify
+    ld.add_action(DeclareLaunchArgument( # Select the map to load for navigation2 
         'map_name',
         default_value='env_map',
         description='Name of the map to load without extension. If empty, use default map for the world.'))

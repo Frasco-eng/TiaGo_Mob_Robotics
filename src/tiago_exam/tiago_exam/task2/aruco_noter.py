@@ -18,7 +18,6 @@ from tiago_exam_interfaces.srv import SaveMarker
 import os
 import csv
 import datetime
-from tiago_exam import utils
 
 ##################################
 # ArucoNoter Class
@@ -36,9 +35,7 @@ class ArucoNoter(Node):
         ##################################
         # Class Parameters
         ##################################
-        ws_src_dir = utils.get_package_src_directory('tiago_exam')
-        data_path_dir = os.path.join(ws_src_dir, 'data')
-        self.declare_parameter('marker_file_path', os.path.join(data_path_dir, 'marker_locations.csv'))
+        self.declare_parameter('marker_file_path', 'marker_locations.csv')
         self.marker_file_path = self.get_parameter('marker_file_path').get_parameter_value().string_value
 
         ##################################
@@ -99,19 +96,7 @@ class ArucoNoter(Node):
             self.get_logger().info(f"Saved: {request.name}")
             
             # Broadcast static TF
-            t = TransformStamped()
-            t.header.stamp = self.get_clock().now().to_msg()
-            t.header.frame_id = 'map'
-            t.child_frame_id = request.name 
-            
-            t.transform.translation.x = p.x
-            t.transform.translation.y = p.y
-            t.transform.translation.z = p.z
-            t.transform.rotation = q
-            
-            self.tf_static_broadcaster.sendTransform(t)
-
-            self.get_logger().info(f"Broadcasted static TF for: {request.name}")
+            self.send_static_tf(request.name, request.pose)
 
             response.success = True
 
@@ -141,6 +126,30 @@ class ArucoNoter(Node):
             self.get_logger().info(f"File CSV initialized at: {self.marker_file_path}")
         except Exception as e:
             self.get_logger().error(f"Error initializing file: {e}")
+    
+    def send_static_tf(self, name, pose):
+        """
+        Helper method to send a static transform for a marker.
+
+        Parameters
+        ----------
+        name : str
+            The name of the marker (child frame).
+        pose : geometry_msgs.msg.Pose
+            The pose of the marker in the 'map' frame.
+        """
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'map'
+        t.child_frame_id = name
+        
+        t.transform.translation.x = pose.position.x
+        t.transform.translation.y = pose.position.y
+        t.transform.translation.z = pose.position.z
+        t.transform.rotation = pose.orientation
+        
+        self.tf_static_broadcaster.sendTransform(t)
+        self.get_logger().info(f"Broadcasted static TF for: {name}")
     
 
 ##################################

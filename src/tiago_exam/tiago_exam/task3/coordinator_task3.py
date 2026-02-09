@@ -107,49 +107,56 @@ class CoordinatorTask3(Node):
         ##################################
         # Class Parameters
         ##################################
-        ws_src_path = utils.get_package_src_directory('tiago_exam')
-        map_path_dir = os.path.join(ws_src_path, 'maps')
-        data_path_dir = os.path.join(ws_src_path, 'data')
+        # Parameters
+        self.declare_parameter('map_path', 'my_map')
+        self.declare_parameter('marker_file_path', 'marker_locations.csv')
+        self.declare_parameter('cubes_size', 0.07)  
         
         # Declare parameters fallback
-        self.map_path = self.declare_parameter('map_path', os.path.join(map_path_dir, 'group29_env_map.yaml')).get_parameter_value().string_value
-        self.marker_file_path = self.declare_parameter('marker_file_path', os.path.join(data_path_dir, 'marker_locations.csv')).get_parameter_value().string_value
+        self.map_path = self.get_parameter('map_path').get_parameter_value().string_value
+        self.marker_file_path = self.get_parameter('marker_file_path').get_parameter_value().string_value
+        self.cube_size = self.get_parameter('cubes_size').get_parameter_value().double_value
 
         ##################################
         # State Variables
         ##################################
         self.current_state = State.INIT
-        self.sub_step = 0
-        self.waiting_for_service = False
-        
-        self.future = None
-        
-        self.nav_in_progress = False
-        self.nav_outcome = False
-        self.move_head_in_progress = False
-        self.move_head_outcome = False
-        self.move_manip_in_progress = False
-        self.move_manip_outcome = False
-        
-        self.target_cube_pose = None
 
-        # Distance from table logic variables
-        self.ref_distance_to_table = None
-        self.approach_threshold = 0.01
-        self.backup_threshold = 0.15
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.pick_marker_frame = "target_aruco_pick_marker_frame"
-        self.place_marker_frame = "target_aruco_place_marker_frame"
+        ##################################
+        # Navigation Variables
+        ##################################
+        self.nav_in_progress = False            # Flag to indicate if navigation is in progress
+        self.nav_outcome = False                # Outcome of the navigation attempt (success/failure)
+        self.ref_distance_to_table = None       # Reference distance from the robot to the table (measured at the pick location)
+        self.approach_threshold = 0.01          # Approach - Backup threshold
+        self.backup_threshold = 0.15            # Buckup threshold to leave the station after pick/place
+        
+        ##################################
+        # Head Movement Variables
+        ##################################
+        self.move_head_in_progress = False      # Flag to indicate if head movement is in progress
+        self.move_head_outcome = False          # Outcome of the head movement attempt (success/failure)
+
+        ##################################
+        # Manipulation Variables
+        ##################################
+        self.move_manip_in_progress = False     # Flag to indicate if manipulator command is in progress
+        self.move_manip_outcome = False         # Outcome of the manipulator command attempt (success/failure)
+        self.target_cube_pose = None            # Latest pose of the target cube in the base_link frame
+
+        ##################################
+        # Collision Variables
+        ##################################
         self.world_pick_surface = {
-            'x': -2.90, 'y': -2.7, 'z': 0.15,
-            'qx': 0.0, 'qy': 0.0, 'qz': -0.7071, 'qw': 0.7071,
-            'size': [1.0, 0.5, 0.3]
+            'x': None, 'y': None, 'z': None,
+            'qx': None, 'qy': None, 'qz': None, 'qw': None,
+            'size': [0.5, 0.7, 0.01]
         }
 
         self.world_place_surface = {
-            'x': 0.25, 'y': -5.7, 'z': 0.15,
-            'qx': 0.0, 'qy': 0.0, 'qz': -0.7071, 'qw': 0.7071,
-            'size': [1.0, 0.5, 0.3]
+            'x': None, 'y': None, 'z': None,
+            'qx': None, 'qy': None, 'qz': None, 'qw': None,
+            'size': [0.5, 0.7, 0.01]
         }
         
         
@@ -162,7 +169,7 @@ class CoordinatorTask3(Node):
         
         self.debug_period = 1.0
         
-        self.timer_debug = self.create_timer(self.debug_period, self.timer_callback)
+        
 
         self.detection_start_time = None
         
@@ -188,6 +195,8 @@ class CoordinatorTask3(Node):
         self.base_link_frame_name = "base_link"
         self.camera_frame_name = "head_front_camera_rgb_optical_frame"
         self.target_frame_name = "aruco_marker_target_frame"
+        self.pick_marker_frame = "target_aruco_pick_marker_frame"
+        self.place_marker_frame = "target_aruco_place_marker_frame"
 
         ##################################
         # TF Setup
@@ -208,53 +217,45 @@ class CoordinatorTask3(Node):
         ##################################
         # Subscriber
         ##################################
-        self.sub_63 = self.create_subscription(
-            TransformStamped,
-            '/aruco_detector63/transform',
-            partial(self.aruco_callback, marker_id=63),
-            10
-        )
-        self.sub_582 = self.create_subscription(
-            TransformStamped,
-            '/aruco_detector582/transform',
-            partial(self.aruco_callback, marker_id=582),
-            10
-        )
+        self.sub_63 = self.create_subscription(TransformStamped, '/aruco_detector63/transform', partial(self.aruco_callback, marker_id=63), 10)
+        self.sub_582 = self.create_subscription(TransformStamped, '/aruco_detector582/transform', partial(self.aruco_callback, marker_id=582), 10)
+        self.timer_debug = self.create_timer(self.debug_period, self.timer_callback)
         
         ##################################
         # Publisher
         ##################################
         self.manipulator_pub = self.create_publisher(String, '/manipulator/command', 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         
         self.get_logger().info(f'{self.get_name()} node has been initialized.')
 
     ##################################
     # Callbacks
     ##################################
-
-    def aruco_callback(self, msg: TransformStamped, marker_id: int):
+    def aruco_callback(self, msg: TransformStamped, marker_id: int) -> None:
         '''
         Callback function for ArUco marker detection.
         Updates the latest detected marker frame if it matches the current cube being processed.
-        Args:
-            msg (TransformStamped): The detected marker transform message.
-            marker_id (int): The ID of the detected marker.
-        Returns:
-            None    
-        '''
         
+        Parameters
+        ----------
+        msg : TransformStamped
+            The transform message containing the detected marker pose.
+        marker_id : int
+            The ID of the detected marker (used to match with the current cube).    
+        '''
         if self.cubes_id[self.current_cube_idx] == marker_id:
             self.latest_aruco_frame = msg 
             
             
-    def nav_response_callback(self, future):
+    def nav_response_callback(self, future) -> None:
         '''
         Callback function for navigation service response.
         Updates the navigation outcome based on the service response.
-        Args:
-            future: The future object containing the service response.
-        Returns:
-            None
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
         '''
         try:
             response = future.result()
@@ -267,18 +268,16 @@ class CoordinatorTask3(Node):
             self.get_logger().error(f"Service call failed: {e}")
             self.nav_outcome = False
         finally:
-            # IMPORTANT: Lower the flag so the main loop knows we are done
             self.nav_in_progress = False
             
-            
-    def move_head_response_callback(self, future):
+    def move_head_response_callback(self, future) -> None:
         '''
         Callback function for move head service response.
         Updates the move head outcome based on the service response.
-        Args:
-            future: The future object containing the service response.
-        Returns:
-            None
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
         '''
         try:
             response = future.result()
@@ -290,14 +289,15 @@ class CoordinatorTask3(Node):
         except Exception as e:
             self.get_logger().error(f"Service call failed: {e}")
     
-    def move_manip_response_callback(self, future):
+    def move_manip_response_callback(self, future) -> None:
         '''
         Callback function for manipulator command service response.
         Updates the manipulator command outcome based on the service response.
-        Args:
-            future: The future object containing the service response.
-        Returns:
-            None
+        
+        Parameters
+        ----------
+        future : Future
+            The future object containing the service response.
         '''
         try:
             response = future.result()
@@ -330,13 +330,13 @@ class CoordinatorTask3(Node):
     ##################################
     # Call
     ##################################
-    def call_send_nav_goal_srv(self, goal: PoseStamped):
+    def call_send_nav_goal_srv(self, goal: PoseStamped) -> None:
         '''
         Call the navigation service to send a navigation goal.
-        Args:
-            goal (PoseStamped): The target pose for navigation.
-        Returns:
-            None
+        Parameters
+        ----------
+        goal : PoseStamped
+            The target pose for navigation.
         '''
         nav_req = StartNavigation.Request()
         nav_req.pose = goal
@@ -350,14 +350,15 @@ class CoordinatorTask3(Node):
         
         nav_future.add_done_callback(self.nav_response_callback)
 
-    def call_move_head_srv(self, pan: float, tilt: float):
+    def call_move_head_srv(self, pan: float, tilt: float) -> None:
         '''
         Call the move head service to position the robot's head.
-        Args:
-            pan (float): The pan angle for the head.
-            tilt (float): The tilt angle for the head.
-        Returns:
-            None
+        Parameters
+        ----------
+        pan : float
+            The pan angle for the head.
+        tilt : float
+            The tilt angle for the head.
         '''
         move_head_req = MoveHead.Request()
         move_head_req.pan = pan
@@ -369,14 +370,15 @@ class CoordinatorTask3(Node):
 
         head_future.add_done_callback(self.move_head_response_callback)
     
-    def call_send_manip_goal_srv(self, type_cmd: str, frame: kdl.Frame):
+    def call_send_manip_goal_srv(self, type_cmd: str, frame: kdl.Frame) -> None:
         '''
         Call the manipulator command service to send a manipulator command.
-        Args:
-            type_cmd (str): The type of manipulator command (e.g., 'PICK', 'PLACE').
-            frame (kdl.Frame): The target frame for the manipulator command.
-        Returns:
-            None
+        Parameters
+        ----------
+        type_cmd : str
+            The type of manipulator command (e.g., 'PICK', 'PLACE').
+        frame : kdl.Frame
+            The target frame for the manipulator command.
         '''
         
         # Create a request
@@ -430,13 +432,12 @@ class CoordinatorTask3(Node):
         
     
     ##################################
-    # Method
+    # Methods
     ##################################
     def load_station_locations(self):
         """
         Load station locations from CSV file
         """
-        # Read CSV file
         try:
             with open(self.marker_file_path, 'r') as f:
                 reader = csv.DictReader(f)
@@ -462,6 +463,25 @@ class CoordinatorTask3(Node):
                     elif 'target_aruco_place_marker_frame' in row['name']:
                         self.place_loc = (x, y)
                         self.place_orientation = q
+                        
+                    elif 'marker_aruco_pick_marker_frame' in row['name']:
+                        self.world_pick_surface['x'] = x
+                        self.world_pick_surface['y'] = y
+                        self.world_pick_surface['z'] = z
+                        
+                        self.world_pick_surface['qx'] = q.x
+                        self.world_pick_surface['qy'] = q.y
+                        self.world_pick_surface['qz'] = q.z
+                        self.world_pick_surface['qw'] = q.w
+                                                
+                    elif 'marker_aruco_place_marker_frame' in row['name']:
+                        self.world_place_surface['x'] = x
+                        self.world_place_surface['y'] = y
+                        self.world_place_surface['z'] = z
+                        self.world_place_surface['qx'] = q.x
+                        self.world_place_surface['qy'] = q.y
+                        self.world_place_surface['qz'] = q.z
+                        self.world_place_surface['qw'] = q.w
                     
                     # Broadcast static TF
                     t = TransformStamped()
@@ -608,41 +628,38 @@ class CoordinatorTask3(Node):
             self.get_logger().warn(f"Impossible to compute distance from base to {target_frame_id}: {e}")
             return None
         
-    def generate_collision_object(self, command: str, object_id: str) -> None:
+    def generate_collision_object(self, command: str, object_id: str, x_cube:float, y_cube:float, z_table:float) -> None:
         table_pose = PoseStamped()
         table_pose.header.frame_id = "base_link"
         table_pose.header.stamp = self.get_clock().now().to_msg()
 
-        # table_width = 1.0
-        # table_depth = 0.5
-        # table_height = 0.3
-
-
-        # position = [self.ref_distance_to_table + (table_depth),
-        #             0.0,
-        #             table_height / 2]
-
-        # quat_xyzw = [0.0,
-        #              0.0,
-        #              0.0,
-        #              1.0]
-
-        # table_size = [table_depth,
-        #               table_width,
-        #               table_height]
-
-        # 1. Seleziona i dati corretti dal dizionario
         if 'pick' in object_id:
+            temp_marker_x = self.world_pick_surface['x']
+            temp_marker_y = self.world_pick_surface['y']
+            self.world_pick_surface['x'] = (x_cube + self.world_pick_surface['x'])/2
+            self.world_pick_surface['y'] = (y_cube + self.world_pick_surface['y'])/2
+            
+            self.world_pick_surface['size'][2] = np.sqrt((temp_marker_x - x_cube)**2 + (temp_marker_y - y_cube)**2)
+            
+            
+            self.world_pick_surface['size'][0] = (z_table - self.world_pick_surface['z'])*2
             data = self.world_pick_surface
             obj_id = "pick_table"
         elif 'place' in object_id:
+            temp_marker_x = self.world_place_surface['x']
+            temp_marker_y = self.world_place_surface['y']
+            self.world_place_surface['x'] = (x_cube + self.world_place_surface['x'])/2
+            self.world_place_surface['y'] = (y_cube + self.world_place_surface['y'])/2
+            
+            self.world_place_surface['size'][2] = np.sqrt((temp_marker_x - x_cube)**2 + (temp_marker_y - y_cube)**2)
+            
+            self.world_place_surface['size'][0] = (z_table - self.world_place_surface['z'])*2
             data = self.world_place_surface
             obj_id = "place_table"
         else:
             self.get_logger().error(f"Unknown table type: {object_id}")
             return
 
-        # 2. Crea la PoseStamped nel frame MAP (World)
         map_pose = PoseStamped()
         map_pose.header.frame_id = "map"
         map_pose.header.stamp = self.get_clock().now().to_msg()
@@ -655,24 +672,18 @@ class CoordinatorTask3(Node):
         map_pose.pose.orientation.z = data['qz']
         map_pose.pose.orientation.w = data['qw']
 
-        # 3. TRASFORMAZIONE: Da Map -> Base_Link
         try:
-            # Cerchiamo la trasformazione inversa: dove è il punto della mappa rispetto a me?
-            # Target: base_link, Source: map
             transform = self.tf_buffer.lookup_transform(
                 "base_link",
                 "map",
-                rclpy.time.Time()) # Ultima disponibile
+                rclpy.time.Time()) 
             
-            # Applichiamo la matematica della trasformazione
             base_link_pose = do_transform_pose(map_pose.pose, transform)
             
         except Exception as e:
             self.get_logger().error(f"Failed to transform table pose from map to base_link: {e}")
             return
         
-        # 4. Prepara i dati per il servizio
-        # Nota: ora usiamo le coordinate TRASFORMATE
         position = [base_link_pose.position.x,
                     base_link_pose.position.y,
                     base_link_pose.position.z]
@@ -713,7 +724,7 @@ class CoordinatorTask3(Node):
                 case State.INIT:
                     self.get_logger().debug("--- State: INIT ---")
 
-                    # 1. Check if all required services are available
+                    # Check of all required services
                     if not self.nav_client.service_is_ready() or \
                     not self.head_client.service_is_ready() or \
                     not self.manip_client.service_is_ready():
@@ -726,7 +737,7 @@ class CoordinatorTask3(Node):
                     # Save the home pose
                     self.save_home_pose()
 
-                    # Load station locations from CSV
+                    # Load station locations 
                     self.load_station_locations()   
 
                     self.get_logger().info(f'Pick Location: {self.pick_loc}, Place Location: {self.place_loc}')
@@ -765,7 +776,6 @@ class CoordinatorTask3(Node):
                         else: 
                             self.get_logger().info("Arrived at Pick Station.")
                             self.current_state = State.PICK
-                            self.sub_step = 0
                             self.nav_outcome = False
                             self.nav_in_progress = False
             
@@ -774,10 +784,7 @@ class CoordinatorTask3(Node):
             
                 case State.PICK:
                     
-                    # --- MODIFICA 2: Lettura e Salvataggio Distanza ---
-                    # Lo facciamo solo una volta all'inizio dello stato PICK
                     if self.ref_distance_to_table is None:
-                        # Leggiamo la distanza reale tra robot e tavolo di pick
                         dist = self.get_distance_from_base(self.pick_marker_frame)
                         
                         if dist is not None:
@@ -787,7 +794,7 @@ class CoordinatorTask3(Node):
                             self.get_logger().warn("Could not read distance! Using default.")
                             self.ref_distance_to_table = 0.14 # Default
 
-                        self.generate_collision_object("ADD", "pick_table")
+                        
 
                     self.get_logger().debug("--- State: PICK ---")
                     
@@ -822,6 +829,16 @@ class CoordinatorTask3(Node):
 
                                     # Get base_T_marker frame
                                     self.base_T_marker = self.get_base_T_marker_frame()
+                                    
+                                    self.map_T_base = self.transform_stamped_to_kdl(self.tf_buffer.lookup_transform("map", self.base_link_frame_name, rclpy.time.Time()))
+                                    
+                                    self.map_T_marker = self.map_T_base * self.base_T_marker
+                                    
+                                    x_cube = self.map_T_marker.p[0]
+                                    y_cube = self.map_T_marker.p[1]
+                                    self.z_table = self.map_T_marker.p[2] - self.cube_size
+                                    
+                                    self.generate_collision_object("ADD", "pick_table", x_cube=x_cube, y_cube=y_cube, z_table=self.z_table)
 
                                     type_cmd = 'PICK_' + str(self.cubes_to_pick[self.current_cube_idx].marker_id)
 
@@ -831,7 +848,7 @@ class CoordinatorTask3(Node):
                                     self.get_logger().warn("TF Transform Failed, retrying...")
                                     time.sleep(self.debug_period)
                             else:
-                                # Timeout: se non trova nulla dopo 5 secondi
+                                # Timeout in 5 secs
                                 if time.time() - self.detection_start_time > 5.0:
                                     self.get_logger().error("Marker NOT found. Skipping cube.")
                                     self.current_state = State.NAVIGATE_PLACE
@@ -896,16 +913,15 @@ class CoordinatorTask3(Node):
                                         self.run_backward()
                                         
                                     else:
-                                        # Siamo alla distanza giusta (o troppo vicini, nel dubbio ci fermiamo)
+                                        
                                         self.get_logger().info(f"Target distance reached (Error: {diff:.3f}m). Stopping.")
                                         
-                                        # Stop robot
+                                        
                                         stop_cmd = Twist()
                                         self.cmd_vel_pub.publish(stop_cmd)
                                         
-                                        # Passa allo stato successivo
                                         self.current_state = State.PLACE
-                                        # Resetta flag
+
                                         self.nav_outcome = False
                                         self.nav_in_progress = False
                                 else:
@@ -935,12 +951,8 @@ class CoordinatorTask3(Node):
                         if not self.move_manip_in_progress and not self.move_manip_outcome:
                             self.get_logger().info("Head positioned. Preparing for place...")
 
-                            self.generate_collision_object("ADD", "place_table")
-
-                            # get x position of base_T_marker
-                            # TODO: questa è hardcode
-                            #self.base_T_marker.p[0] = np.clip(self.base_T_marker.p[0] + 0.4, a_min=0.0, a_max=0.7)
                             
+
                             # Define release pose based on grasp transform
                             release_frame = kdl.Frame(self.base_T_marker)
 
@@ -948,7 +960,13 @@ class CoordinatorTask3(Node):
                             release_frame.p[2] += 0.1 
 
                             # Save release pose
-                            self.cubes_to_pick[self.current_cube_idx].release_pose = self.kdl_to_pose_msg(release_frame, self.base_link_frame_name)
+                            release_pose = self.kdl_to_pose_msg(release_frame, self.base_link_frame_name)
+                            self.cubes_to_pick[self.current_cube_idx].release_pose = release_pose
+                            
+                            x_cube = release_pose.pose.position.x
+                            y_cube = release_pose.pose.position.y
+                            
+                            self.generate_collision_object("ADD", "place_table", x_cube=x_cube, y_cube=y_cube, z_table=self.z_table)
 
                             # Publish TF
                             self.publish_tf(self.cubes_to_pick[self.current_cube_idx].release_pose)

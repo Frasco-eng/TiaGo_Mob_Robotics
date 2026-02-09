@@ -117,7 +117,7 @@ class HeadMotionService(Node):
         # Get navigation result
         nav_result = result_future.result() 
 
-        # Status 4 = SUCCEEDED
+        # Status Success
         if nav_result.status == 4:
             response.success = True
         else:

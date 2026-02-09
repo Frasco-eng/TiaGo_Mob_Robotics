@@ -10,10 +10,8 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from geometry_msgs.msg import Pose
 from pymoveit2 import MoveIt2
 from pymoveit2 import GripperInterface
-from geometry_msgs.msg import PoseStamped, WrenchStamped
+from geometry_msgs.msg import PoseStamped
 from linkattacher_msgs.srv import AttachLink, DetachLink
-from moveit_msgs.msg import CollisionObject
-from shape_msgs.msg import SolidPrimitive
 from sensor_msgs.msg import JointState
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from geometry_msgs.msg import TransformStamped
@@ -23,7 +21,6 @@ from tf2_ros.transform_broadcaster import TransformBroadcaster
 
 # Custom Service
 from tiago_exam_interfaces.srv import ManipulatorCommand, SetCollisionObject
-
 
 # Python Libraries
 from enum import Enum
@@ -215,8 +212,7 @@ class Manipulator(Node):
                 response.success = False
                 return response
 
-    
-        event_set = self.task_finished_event.wait(timeout=60.0) 
+        event_set = self.task_finished_event.wait(timeout=120.0) 
 
         if not event_set:
             self.get_logger().error("Operation timed out!")

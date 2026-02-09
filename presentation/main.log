@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.2.3)  8 FEB 2026 15:50
+This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.2.3)  9 FEB 2026 19:54
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -628,48 +628,67 @@ File: pgfmodulematrix.code.tex 2021/05/15 v3.1.9a (3.1.9a)
 \tikz@expandcount=\count351
  (/usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarytopaths.code.tex
 File: tikzlibrarytopaths.code.tex 2021/05/15 v3.1.9a (3.1.9a)
-))) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamerthemeMadrid.sty (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamercolorthemewhale.sty) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamercolorthemeorchid.sty) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamerinnerthemerounded.sty) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamerouterthemeinfolines.sty))
+))) (/usr/share/texlive/texmf-dist/tex/generic/dirtree/dirtree.sty
+Package: dirtree 2012/12/11 v0.32 package wrapper for dirtree
+ (/usr/share/texlive/texmf-dist/tex/generic/dirtree/dirtree.tex `dirtree' v0.32, 2012/12/11 (jcc)
+\DT@offset=\dimen317
+\DT@width=\dimen318
+\DT@sep=\dimen319
+\DT@all=\dimen320
+\DT@rulewidth=\dimen321
+\DT@dotwidth=\dimen322
+\DTbaselineskip=\dimen323
+\DT@counti=\count352
+\DT@countii=\count353
+\DT@countiii=\count354
+\DT@countiv=\count355
+\DT@indent=\dimen324
+\DT@parskip=\dimen325
+\DT@baselineskip=\dimen326
+)
+File: dirtree.tex 2012/12/11 v0.32 `dirtree' (jcc)
+) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamerthemeMadrid.sty (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamercolorthemewhale.sty) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamercolorthemeorchid.sty) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamerinnerthemerounded.sty) (/usr/share/texlive/texmf-dist/tex/latex/beamer/beamerouterthemeinfolines.sty))
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\\' on input line 177.
+(hyperref)                removing `\\' on input line 188.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\new@ifnextchar' on input line 177.
+(hyperref)                removing `\new@ifnextchar' on input line 188.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\\' on input line 177.
+(hyperref)                removing `\\' on input line 188.
 
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `\\' on input line 177.
+(hyperref)                removing `\\' on input line 188.
 
 (/usr/share/texlive/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def
 File: l3backend-pdftex.def 2022-01-12 L3 backend support: PDF output (pdfTeX)
-\l__color_backend_stack_int=\count352
+\l__color_backend_stack_int=\count356
 \l__pdf_internal_box=\box84
 ) (./main.aux)
 \openout1 = `main.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 195.
-LaTeX Font Info:    ... okay on input line 195.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 206.
+LaTeX Font Info:    ... okay on input line 206.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -707,16 +726,16 @@ LaTeX Font Info:    ... okay on input line 195.
 
 (/usr/share/texlive/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count353
-\scratchdimen=\dimen317
+\scratchcounter=\count357
+\scratchdimen=\dimen327
 \scratchbox=\box85
-\nofMPsegments=\count354
-\nofMParguments=\count355
+\nofMPsegments=\count358
+\nofMParguments=\count359
 \everyMPshowfont=\toks50
-\MPscratchCnt=\count356
-\MPscratchDim=\dimen318
-\MPnumerator=\count357
-\makeMPintoPDFobject=\count358
+\MPscratchCnt=\count360
+\MPscratchDim=\dimen328
+\MPnumerator=\count361
+\makeMPintoPDFobject=\count362
 \everyMPtoPDFconversion=\toks51
 ) (/usr/share/texlive/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
 Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
@@ -724,7 +743,7 @@ Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 48
  (/usr/share/texlive/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Live
 ))
-Package hyperref Info: Link coloring OFF on input line 195.
+Package hyperref Info: Link coloring OFF on input line 206.
  (/usr/share/texlive/texmf-dist/tex/latex/hyperref/nameref.sty
 Package: nameref 2021-04-02 v2.47 Cross-referencing by name of section
  (/usr/share/texlive/texmf-dist/tex/latex/refcount/refcount.sty
@@ -732,53 +751,53 @@ Package: refcount 2019/12/15 v3.6 Data extraction from label references (HO)
 ) (/usr/share/texlive/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty
 Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
 )
-\c@section@level=\count359
+\c@section@level=\count363
 )
-LaTeX Info: Redefining \ref on input line 195.
-LaTeX Info: Redefining \pageref on input line 195.
-LaTeX Info: Redefining \nameref on input line 195.
+LaTeX Info: Redefining \ref on input line 206.
+LaTeX Info: Redefining \pageref on input line 206.
+LaTeX Info: Redefining \nameref on input line 206.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
-(Font)                  OT1/cmr/m/n --> OT1/cmss/m/n on input line 195.
+(Font)                  OT1/cmr/m/n --> OT1/cmss/m/n on input line 206.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
-(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 195.
+(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 206.
 \symnumbers=\mathgroup6
 \sympureletters=\mathgroup7
 LaTeX Font Info:    Overwriting math alphabet `\mathrm' in version `normal'
-(Font)                  OT1/cmss/m/n --> OT1/cmr/m/n on input line 195.
-LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 195.
+(Font)                  OT1/cmss/m/n --> OT1/cmr/m/n on input line 206.
+LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `normal'
-(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 195.
+(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
-(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 195.
-LaTeX Font Info:    Redeclaring math alphabet \mathsf on input line 195.
+(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 206.
+LaTeX Font Info:    Redeclaring math alphabet \mathsf on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `normal'
-(Font)                  OT1/cmss/m/n --> OT1/cmss/m/n on input line 195.
+(Font)                  OT1/cmss/m/n --> OT1/cmss/m/n on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
-(Font)                  OT1/cmss/bx/n --> OT1/cmss/m/n on input line 195.
-LaTeX Font Info:    Redeclaring math alphabet \mathit on input line 195.
+(Font)                  OT1/cmss/bx/n --> OT1/cmss/m/n on input line 206.
+LaTeX Font Info:    Redeclaring math alphabet \mathit on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `normal'
-(Font)                  OT1/cmr/m/it --> OT1/cmss/m/it on input line 195.
+(Font)                  OT1/cmr/m/it --> OT1/cmss/m/it on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
-(Font)                  OT1/cmr/bx/it --> OT1/cmss/m/it on input line 195.
-LaTeX Font Info:    Redeclaring math alphabet \mathtt on input line 195.
+(Font)                  OT1/cmr/bx/it --> OT1/cmss/m/it on input line 206.
+LaTeX Font Info:    Redeclaring math alphabet \mathtt on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `normal'
-(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 195.
+(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 195.
+(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 206.
 LaTeX Font Info:    Overwriting symbol font `numbers' in version `bold'
-(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 195.
+(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 206.
 LaTeX Font Info:    Overwriting symbol font `pureletters' in version `bold'
-(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 195.
+(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathrm' in version `bold'
-(Font)                  OT1/cmss/b/n --> OT1/cmr/b/n on input line 195.
+(Font)                  OT1/cmss/b/n --> OT1/cmr/b/n on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
-(Font)                  OT1/cmss/b/n --> OT1/cmss/b/n on input line 195.
+(Font)                  OT1/cmss/b/n --> OT1/cmss/b/n on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
-(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 195.
+(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
-(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 195.
+(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 206.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  OT1/cmtt/m/n --> OT1/cmtt/b/n on input line 195.
+(Font)                  OT1/cmtt/m/n --> OT1/cmtt/b/n on input line 206.
  (/usr/share/texlive/texmf-dist/tex/latex/translator/translator-basic-dictionary-English.dict
 Dictionary: translator-basic-dictionary, Language: English 
 ) (/usr/share/texlive/texmf-dist/tex/latex/translator/translator-bibliography-dictionary-English.dict
@@ -792,7 +811,7 @@ Dictionary: translator-numbers-dictionary, Language: English
 ) (/usr/share/texlive/texmf-dist/tex/latex/translator/translator-theorem-dictionary-English.dict
 Dictionary: translator-theorem-dictionary, Language: English 
 )
-\c@lstlisting=\count360
+\c@lstlisting=\count364
  (./main.nav) [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] (./main.toc) [2
@@ -828,7 +847,7 @@ Package pdftex.def Info: ./Images//Task3_preview.png  used on input line 46.
 ] [5
 
 ]) (./slides/02_task1.tex
-<./Images//kitchen_table.png, id=131, 695.59875pt x 903.375pt>
+<./Images//kitchen_table.png, id=132, 695.59875pt x 903.375pt>
 File: ./Images//kitchen_table.png Graphic file (type png)
 <use ./Images//kitchen_table.png>
 Package pdftex.def Info: ./Images//kitchen_table.png  used on input line 34.
@@ -838,7 +857,7 @@ Package pdftex.def Info: ./Images//kitchen_table.png  used on input line 34.
  <./Images//kitchen_table.png>] [7
 
 ]
-<./Images//SafePose.png, id=174, 1273.75874pt x 1365.1pt>
+<./Images//SafePose.png, id=172, 1273.75874pt x 1365.1pt>
 File: ./Images//SafePose.png Graphic file (type png)
 <use ./Images//SafePose.png>
 Package pdftex.def Info: ./Images//SafePose.png  used on input line 83.
@@ -848,167 +867,179 @@ Package pdftex.def Info: ./Images//SafePose.png  used on input line 83.
  <./Images//SafePose.png>]
 File: ./Images//Costmap.png Graphic file (type png)
 <use ./Images//Costmap.png>
-Package pdftex.def Info: ./Images//Costmap.png  used on input line 110.
-(pdftex.def)             Requested size: 123.90994pt x 107.02615pt.
+Package pdftex.def Info: ./Images//Costmap.png  used on input line 117.
+(pdftex.def)             Requested size: 120.47046pt x 104.06062pt.
  [9
 
 ]
-<./Images//Thumb_task1.png, id=187, 3854.4pt x 2168.1pt>
+<./Images//Thumb_task1.png, id=185, 3854.4pt x 2168.1pt>
 File: ./Images//Thumb_task1.png Graphic file (type png)
 <use ./Images//Thumb_task1.png>
-Package pdftex.def Info: ./Images//Thumb_task1.png  used on input line 121.
+Package pdftex.def Info: ./Images//Thumb_task1.png  used on input line 126.
 (pdftex.def)             Requested size: 309.77368pt x 174.24553pt.
  [10
 
  <./Images//Thumb_task1.png>]) (./slides/03_task2.tex
-<./Images//PickTable.png, id=207, 1383.1675pt x 1127.21124pt>
+<./Images//PickTable.png, id=205, 1383.1675pt x 1127.21124pt>
 File: ./Images//PickTable.png Graphic file (type png)
 <use ./Images//PickTable.png>
-Package pdftex.def Info: ./Images//PickTable.png  used on input line 39.
+Package pdftex.def Info: ./Images//PickTable.png  used on input line 37.
 (pdftex.def)             Requested size: 108.4203pt x 88.35556pt.
-<./Images//PlaceTable.png, id=208, 1383.1675pt x 1127.21124pt>
+<./Images//PlaceTable.png, id=206, 1383.1675pt x 1127.21124pt>
 File: ./Images//PlaceTable.png Graphic file (type png)
 <use ./Images//PlaceTable.png>
-Package pdftex.def Info: ./Images//PlaceTable.png  used on input line 39.
+Package pdftex.def Info: ./Images//PlaceTable.png  used on input line 37.
 (pdftex.def)             Requested size: 108.4203pt x 88.35556pt.
  [11
 
  <./Images//PickTable.png> <./Images//PlaceTable.png>] [12
 
+] [13
+
 ]
-<./Images//task2_state_machine.png, id=271, 182.6022pt x 220.9053pt>
+<./Images//task2_state_machine.png, id=288, 760.8425pt x 920.43875pt>
 File: ./Images//task2_state_machine.png Graphic file (type png)
 <use ./Images//task2_state_machine.png>
-Package pdftex.def Info: ./Images//task2_state_machine.png  used on input line 90.
-(pdftex.def)             Requested size: 137.67603pt x 166.56169pt.
-
-Overfull \vbox (9.16635pt too high) detected at line 90
- []
-
-[13
-
- <./Images//task2_state_machine.png>]
-<./Images//Convergence2.png, id=291, 2181.14874pt x 1842.885pt>
-File: ./Images//Convergence2.png Graphic file (type png)
-<use ./Images//Convergence2.png>
-Package pdftex.def Info: ./Images//Convergence2.png  used on input line 122.
-(pdftex.def)             Requested size: 72.28143pt x 61.04878pt.
-<./Images//covariance_plot.png, id=292, 722.7pt x 433.62pt>
-File: ./Images//covariance_plot.png Graphic file (type png)
-<use ./Images//covariance_plot.png>
-Package pdftex.def Info: ./Images//covariance_plot.png  used on input line 122.
-(pdftex.def)             Requested size: 103.25964pt x 61.95029pt.
+Package pdftex.def Info: ./Images//task2_state_machine.png  used on input line 103.
+(pdftex.def)             Requested size: 137.67603pt x 166.55664pt.
  [14
 
- <./Images//Convergence2.png> <./Images//covariance_plot.png>]
-<./Images//exploration_map.png, id=314, 195.73125pt x 226.8475pt>
-File: ./Images//exploration_map.png Graphic file (type png)
-<use ./Images//exploration_map.png>
-Package pdftex.def Info: ./Images//exploration_map.png  used on input line 156.
-(pdftex.def)             Requested size: 61.37492pt x 71.13196pt.
-File: ./Images//RandomNav2.png Graphic file (type png)
-<use ./Images//RandomNav2.png>
-Package pdftex.def Info: ./Images//RandomNav2.png  used on input line 156.
-(pdftex.def)             Requested size: 101.87062pt x 56.89612pt.
+ <./Images//task2_state_machine.png>]
+<./Images//Convergence2.png, id=307, 2181.14874pt x 1842.885pt>
+File: ./Images//Convergence2.png Graphic file (type png)
+<use ./Images//Convergence2.png>
+Package pdftex.def Info: ./Images//Convergence2.png  used on input line 127.
+(pdftex.def)             Requested size: 103.25964pt x 87.22862pt.
  [15
 
- <./Images//exploration_map.png (PNG copy)>]
-<./Images//ArucoTracking2.png, id=332, 1848.9075pt x 1051.93pt>
-File: ./Images//ArucoTracking2.png Graphic file (type png)
-<use ./Images//ArucoTracking2.png>
-Package pdftex.def Info: ./Images//ArucoTracking2.png  used on input line 191.
-(pdftex.def)             Requested size: 123.90718pt x 70.4966pt.
-<./Images//ArucoInspection.png, id=333, 1848.9075pt x 1051.93pt>
-File: ./Images//ArucoInspection.png Graphic file (type png)
-<use ./Images//ArucoInspection.png>
-Package pdftex.def Info: ./Images//ArucoInspection.png  used on input line 191.
-(pdftex.def)             Requested size: 123.90718pt x 70.4966pt.
+ <./Images//Convergence2.png>]
+<./Images//covariance_plot.png, id=315, 722.7pt x 433.62pt>
+File: ./Images//covariance_plot.png Graphic file (type png)
+<use ./Images//covariance_plot.png>
+Package pdftex.def Info: ./Images//covariance_plot.png  used on input line 135.
+(pdftex.def)             Requested size: 344.19533pt x 206.51419pt.
 
-Overfull \vbox (7.85739pt too high) detected at line 191
+Overfull \vbox (11.28947pt too high) detected at line 135
  []
 
 [16
 
- <./Images//ArucoTracking2.png> <./Images//ArucoInspection.png>] [17
+ <./Images//covariance_plot.png>]
+<./Images//exploration_map.png, id=334, 195.73125pt x 226.8475pt>
+File: ./Images//exploration_map.png Graphic file (type png)
+<use ./Images//exploration_map.png>
+Package pdftex.def Info: ./Images//exploration_map.png  used on input line 168.
+(pdftex.def)             Requested size: 61.37492pt x 71.13196pt.
+File: ./Images//RandomNav2.png Graphic file (type png)
+<use ./Images//RandomNav2.png>
+Package pdftex.def Info: ./Images//RandomNav2.png  used on input line 168.
+(pdftex.def)             Requested size: 101.87062pt x 56.89612pt.
+ [17
+
+ <./Images//exploration_map.png (PNG copy)>] [18
 
 ]
-<./Images//Thumb_task2.png, id=360, 3854.4pt x 2168.1pt>
+<./Images//ArucoTracking2.png, id=357, 1848.9075pt x 1051.93pt>
+File: ./Images//ArucoTracking2.png Graphic file (type png)
+<use ./Images//ArucoTracking2.png>
+Package pdftex.def Info: ./Images//ArucoTracking2.png  used on input line 191.
+(pdftex.def)             Requested size: 344.19533pt x 195.82388pt.
+
+Overfull \vbox (0.59917pt too high) detected at line 191
+ []
+
+[19
+
+ <./Images//ArucoTracking2.png>]
+<./Images//ArucoInspection.png, id=365, 1848.9075pt x 1051.93pt>
+File: ./Images//ArucoInspection.png Graphic file (type png)
+<use ./Images//ArucoInspection.png>
+Package pdftex.def Info: ./Images//ArucoInspection.png  used on input line 201.
+(pdftex.def)             Requested size: 344.19533pt x 195.82388pt.
+
+Overfull \vbox (0.59917pt too high) detected at line 201
+ []
+
+[20
+
+ <./Images//ArucoInspection.png>]
+<./Images//Thumb_task2.png, id=373, 3854.4pt x 2168.1pt>
 File: ./Images//Thumb_task2.png Graphic file (type png)
 <use ./Images//Thumb_task2.png>
-Package pdftex.def Info: ./Images//Thumb_task2.png  used on input line 220.
+Package pdftex.def Info: ./Images//Thumb_task2.png  used on input line 211.
 (pdftex.def)             Requested size: 309.77368pt x 174.24553pt.
- [18
+ [21
 
- <./Images//Thumb_task2.png>]) (./slides/04_task3.tex [19
+ <./Images//Thumb_task2.png>]) (./slides/04_task3.tex [22
 
-] [20
+] [23
 
-] [21
+] [24
 
 ]
-<./Images//task3_state_machine.png, id=434, 108.8868pt x 277.2759pt>
+<./Images//task3_state_machine.png, id=446, 108.8868pt x 277.2759pt>
 File: ./Images//task3_state_machine.png Graphic file (type png)
 <use ./Images//task3_state_machine.png>
 Package pdftex.def Info: ./Images//task3_state_machine.png  used on input line 110.
 (pdftex.def)             Requested size: 68.83801pt x 175.2982pt.
-<./Images//task3_manipulator.png, id=435, 197.7789pt x 271.4943pt>
+<./Images//task3_manipulator.png, id=447, 197.7789pt x 271.4943pt>
 File: ./Images//task3_manipulator.png Graphic file (type png)
 <use ./Images//task3_manipulator.png>
 Package pdftex.def Info: ./Images//task3_manipulator.png  used on input line 110.
 (pdftex.def)             Requested size: 137.67603pt x 189.00073pt.
- [22
+ [25
 
  <./Images//task3_state_machine.png> <./Images//task3_manipulator.png>]
-<./Images//CubeInspection.png, id=455, 1460.45625pt x 1191.45125pt>
+<./Images//CubeInspection.png, id=468, 1460.45625pt x 1191.45125pt>
 File: ./Images//CubeInspection.png Graphic file (type png)
 <use ./Images//CubeInspection.png>
 Package pdftex.def Info: ./Images//CubeInspection.png  used on input line 135.
 (pdftex.def)             Requested size: 137.67865pt x 112.31639pt.
- [23
-
- <./Images//CubeInspection.png>]
-<./Images//Planning5.png, id=486, 644.4075pt x 661.47125pt>
-File: ./Images//Planning5.png Graphic file (type png)
-<use ./Images//Planning5.png>
-Package pdftex.def Info: ./Images//Planning5.png  used on input line 167.
-(pdftex.def)             Requested size: 83.1466pt x 85.34831pt.
-
-Overfull \vbox (9.63893pt too high) detected at line 167
- []
-
-[24
-
- <./Images//Planning5.png>] [25
-
-]
-<./Images//CubeExtraction.png, id=515, 1460.45625pt x 1191.45125pt>
-File: ./Images//CubeExtraction.png Graphic file (type png)
-<use ./Images//CubeExtraction.png>
-Package pdftex.def Info: ./Images//CubeExtraction.png  used on input line 216.
-(pdftex.def)             Requested size: 90.86841pt x 74.12009pt.
-<./Images//ArmRetraction.png, id=516, 1460.45625pt x 1191.45125pt>
-File: ./Images//ArmRetraction.png Graphic file (type png)
-<use ./Images//ArmRetraction.png>
-Package pdftex.def Info: ./Images//ArmRetraction.png  used on input line 216.
-(pdftex.def)             Requested size: 90.86841pt x 74.12009pt.
-<./Images//TorsoRetraction.png, id=517, 1460.45625pt x 1191.45125pt>
-File: ./Images//TorsoRetraction.png Graphic file (type png)
-<use ./Images//TorsoRetraction.png>
-Package pdftex.def Info: ./Images//TorsoRetraction.png  used on input line 216.
-(pdftex.def)             Requested size: 90.86841pt x 74.12009pt.
  [26
 
- <./Images//CubeExtraction.png> <./Images//ArmRetraction.png> <./Images//TorsoRetraction.png>] [27
+ <./Images//CubeInspection.png>]
+<./Images//Planning5.png, id=499, 644.4075pt x 661.47125pt>
+File: ./Images//Planning5.png Graphic file (type png)
+<use ./Images//Planning5.png>
+Package pdftex.def Info: ./Images//Planning5.png  used on input line 169.
+(pdftex.def)             Requested size: 83.1466pt x 85.34831pt.
 
-] [28
+Overfull \vbox (9.21722pt too high) detected at line 169
+ []
+
+[27
+
+ <./Images//Planning5.png>] [28
 
 ]
-<./Images//Thumb_task3.png, id=586, 3854.4pt x 2168.1pt>
+<./Images//CubeExtraction.png, id=529, 1460.45625pt x 1191.45125pt>
+File: ./Images//CubeExtraction.png Graphic file (type png)
+<use ./Images//CubeExtraction.png>
+Package pdftex.def Info: ./Images//CubeExtraction.png  used on input line 218.
+(pdftex.def)             Requested size: 90.86841pt x 74.12009pt.
+<./Images//ArmRetraction.png, id=530, 1460.45625pt x 1191.45125pt>
+File: ./Images//ArmRetraction.png Graphic file (type png)
+<use ./Images//ArmRetraction.png>
+Package pdftex.def Info: ./Images//ArmRetraction.png  used on input line 218.
+(pdftex.def)             Requested size: 90.86841pt x 74.12009pt.
+<./Images//TorsoRetraction.png, id=531, 1460.45625pt x 1191.45125pt>
+File: ./Images//TorsoRetraction.png Graphic file (type png)
+<use ./Images//TorsoRetraction.png>
+Package pdftex.def Info: ./Images//TorsoRetraction.png  used on input line 218.
+(pdftex.def)             Requested size: 90.86841pt x 74.12009pt.
+ [29
+
+ <./Images//CubeExtraction.png> <./Images//ArmRetraction.png> <./Images//TorsoRetraction.png>] [30
+
+] [31
+
+]
+<./Images//Thumb_task3.png, id=601, 3854.4pt x 2168.1pt>
 File: ./Images//Thumb_task3.png Graphic file (type png)
 <use ./Images//Thumb_task3.png>
-Package pdftex.def Info: ./Images//Thumb_task3.png  used on input line 291.
+Package pdftex.def Info: ./Images//Thumb_task3.png  used on input line 293.
 (pdftex.def)             Requested size: 309.77368pt x 174.24553pt.
- [29
+ [32
 
  <./Images//Thumb_task3.png>])
 \tf@nav=\write5
@@ -1022,18 +1053,18 @@ Package pdftex.def Info: ./Images//Thumb_task3.png  used on input line 291.
 
  (./main.aux) ) 
 Here is how much of TeX's memory you used:
- 27320 strings out of 480171
- 543663 string characters out of 5894490
- 773671 words of memory out of 5000000
- 44627 multiletter control sequences out of 15000+600000
- 481792 words of font info for 75 fonts, out of 8000000 for 9000
+ 27407 strings out of 480171
+ 544900 string characters out of 5894490
+ 775897 words of memory out of 5000000
+ 44702 multiletter control sequences out of 15000+600000
+ 481498 words of font info for 74 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
- 99i,15n,104p,484b,1058s stack positions out of 5000i,500n,10000p,200000b,80000s
-</usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy5.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt8.pfb>
-Output written on main.pdf (29 pages, 19019233 bytes).
+ 99i,15n,104p,484b,1060s stack positions out of 5000i,500n,10000p,200000b,80000s
+</usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cmextra/cmex9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmss9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy5.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt8.pfb>
+Output written on main.pdf (32 pages, 19046917 bytes).
 PDF statistics:
- 688 PDF objects out of 1000 (max. 8388607)
- 394 compressed objects within 4 object streams
- 65 named destinations out of 1000 (max. 500000)
- 1246 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 713 PDF objects out of 1000 (max. 8388607)
+ 412 compressed objects within 5 object streams
+ 71 named destinations out of 1000 (max. 500000)
+ 1240 words of extra memory for PDF output out of 10000 (max. 10000000)
 

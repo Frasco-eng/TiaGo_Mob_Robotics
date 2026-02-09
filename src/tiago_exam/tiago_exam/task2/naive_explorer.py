@@ -11,11 +11,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from geometry_msgs.msg import PoseStamped
 
 # Custom Services
-from tiago_exam_interfaces.srv import InitGoals
-from tiago_exam_interfaces.srv import GetNextGoal
-
-from tiago_exam import utils
-
+from tiago_exam_interfaces.srv import InitGoals, GetNextGoal
 
 # Python Standard Libraries
 import yaml
@@ -24,6 +20,8 @@ import cv2
 import numpy as np
 import random
 import os
+from tiago_exam import utils
+
 ##################################
 # Naive Explorer Node
 ##################################
@@ -45,12 +43,8 @@ class NaiveExplorer(Node):
         ##################################
         # Class Parameters
         ##################################
-        # Retrieve paths
-        ws_src_dir = utils.get_package_src_directory('tiago_exam')
-        map_path_dir = os.path.join(ws_src_dir, 'maps')
-        
-        # Declare parameters fallback
-        self.map_path = self.declare_parameter('map_path', os.path.join(map_path_dir, 'group29_env_map.yaml')).get_parameter_value().string_value
+        self.declare_parameter('map_path', 'my_map')
+        self.map_path = self.get_parameter('map_path').get_parameter_value().string_value
         
         ##################################
         # State Variables
@@ -94,20 +88,24 @@ class NaiveExplorer(Node):
         # Loop over valid goal coordinates and append PoseStamped messages
         if wx:
             for x, y in zip(wx, wy):
+                # Create PoseStamped message for each goal
                 p = PoseStamped()
                 p.header.frame_id = 'map'
+
+                # Set position
                 p.pose.position.x, p.pose.position.y = float(x), float(y)
                 
+                # Random yaw between 0 and 2*pi
                 random_yaw = random.uniform(0, 2 * np.pi)
 
-                # 2. Convert Yaw (Z-axis rotation) to Quaternion
-                # Formula: x=0, y=0, z=sin(yaw/2), w=cos(yaw/2)
+                # Set orientation as quaternion
                 p.pose.orientation.x = 0.0
                 p.pose.orientation.y = 0.0
                 p.pose.orientation.z = np.sin(random_yaw / 2.0)
                 p.pose.orientation.w = np.cos(random_yaw / 2.0)
                 
                 self.exploration_goals.append(p)
+
             self.current_expl_goal_idx = 0
             
         success = len(self.exploration_goals) == self.init_goals
@@ -173,7 +171,7 @@ class NaiveExplorer(Node):
             Two lists containing the x and y coordinates of the generated goals.
         """
         try:
-            # Open and parse the map YAML file
+            # Open YAML
             with open(self.map_path, 'r') as f:
                 map_data = yaml.safe_load(f)
 
@@ -181,7 +179,7 @@ class NaiveExplorer(Node):
             resolution = map_data['resolution']
             origin = map_data['origin']
 
-            # Default safe coordinates (x, y, z, theta)
+            # Default safe coordinates
             safe_coords = [0.0, -1.3, 0.0, 0.0] 
 
             # Load the map image
@@ -207,26 +205,22 @@ class NaiveExplorer(Node):
             mx, my = [], []
             h, w = img.shape
 
-            # Randomly select goal pixels and convert to map coordinates
             # NOTE: this conversion happens in the map reference frame because the navigation stack will use the map frame as reference.
             for _ in range(self.init_goals):
                 r, c = random.choice(whitelist_pixels) # row, col (pixel coordinates)
                 mx.append(origin[0] + c * resolution) # x, y (map coordinates)
                 my.append(origin[1] + (h - r) * resolution)
 
-
-            # --- DEBUG SECTION START ---
             temp_dir_path = os.path.join(utils.get_package_src_directory('tiago_exam'), 'temp')
             if not os.path.exists(temp_dir_path):
                 os.makedirs(temp_dir_path)
             # Create a 3-channel BGR image for colorful markers
             debug_img_bgr = cv2.cvtColor(binary_map, cv2.COLOR_GRAY2BGR)
 
-            # Highlight Safe Zone (Light Green)
+            # Highlight Safe Zone 
             for r, c in whitelist_pixels:
                 debug_img_bgr[r, c] = [200, 255, 200] 
 
-            # Draw OpenCV Origin & Axes (Top-Left)
             # CV Origin is (0,0). X is Col (Right), Y is Row (Down)
             cv2.circle(debug_img_bgr, (5, 5), 5, (0, 0, 255), -1) 
             cv2.arrowedLine(debug_img_bgr, (5, 5), (55, 5), (0, 0, 255), 2, tipLength=0.3)  # Red X
@@ -246,16 +240,16 @@ class NaiveExplorer(Node):
             cv2.drawMarker(debug_img_bgr, (ros_origin_px_x, ros_origin_px_y), 
                         (255, 0, 0), cv2.MARKER_CROSS, 20, 1)
             
-            # Length of axis in pixels (e.g., 1 meter)
+            # Length of axis in pixels 
             axis_len_px = int(1.0 / resolution)
 
-            # Draw ROS X Axis (Blue) -> Points Right
+            # Draw ROS X Axis 
             cv2.arrowedLine(debug_img_bgr, 
                             (ros_origin_px_x, ros_origin_px_y), 
                             (ros_origin_px_x + axis_len_px, ros_origin_px_y), 
                             (0, 0, 255), 2, tipLength=0.3)
             
-            # Draw ROS Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
+            # Draw ROS Y Axis 
             cv2.arrowedLine(debug_img_bgr, 
                             (ros_origin_px_x, ros_origin_px_y), 
                             (ros_origin_px_x, ros_origin_px_y - axis_len_px), 
@@ -265,13 +259,13 @@ class NaiveExplorer(Node):
                         (ros_origin_px_x + 10, ros_origin_px_y - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
-            # Draw Map X Axis (Blue) -> Points Right
+            # Draw Map X Axis 
             cv2.arrowedLine(debug_img_bgr, 
                             (map_origin_px_x, map_origin_px_y), 
                             (map_origin_px_x + axis_len_px, map_origin_px_y), 
                             (0, 0, 255), 2, tipLength=0.3)
             
-            # Draw Map Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
+            # Draw Map Y Axis 
             cv2.arrowedLine(debug_img_bgr, 
                             (map_origin_px_x, map_origin_px_y), 
                             (map_origin_px_x, map_origin_px_y - axis_len_px), 
@@ -281,13 +275,13 @@ class NaiveExplorer(Node):
                         (map_origin_px_x + 10, map_origin_px_y - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
-            # Draw pgm X Axis (Blue) -> Points Right
+            # Draw pgm X Axis 
             cv2.arrowedLine(debug_img_bgr, 
                             (pgm_origin_px_x, pgm_origin_px_y), 
                             (pgm_origin_px_x + axis_len_px, pgm_origin_px_y), 
                             (0, 0, 255), 2, tipLength=0.3)
             
-            # Draw pgm Y Axis (Magenta) -> Points UP (which is decreasing row index in CV)
+            # Draw pgm Y Axis
             cv2.arrowedLine(debug_img_bgr, 
                             (pgm_origin_px_x, pgm_origin_px_y), 
                             (pgm_origin_px_x, pgm_origin_px_y - axis_len_px), 
@@ -297,12 +291,11 @@ class NaiveExplorer(Node):
                         (pgm_origin_px_x + 10, pgm_origin_px_y - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
-            # Save Debug Image
+            # Save Image
             debug_image_path = os.path.join(temp_dir_path, 'exploration_map.png')
             cv2.imwrite(debug_image_path, debug_img_bgr)
             
             print(f"Debug map saved to: {debug_image_path}")
-            # --- DEBUG SECTION END ---
 
             return mx, my
         except Exception as e:

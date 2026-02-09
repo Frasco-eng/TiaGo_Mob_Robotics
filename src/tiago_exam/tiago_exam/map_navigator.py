@@ -12,44 +12,43 @@ from nav2_msgs.action import NavigateToPose
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import PoseStamped
-
 from nav_msgs.msg import Odometry
-
 from geometry_msgs.msg import Twist
 from std_srvs.srv import Trigger
 
 # Custom service
 from tiago_exam_interfaces.srv import StartNavigation
 
-ANGULAR_SPEED = 1.0  # radians per second
+ANGULAR_SPEED = 1.0  # [rad/s]
 
 ##################################
 # Map Navigator Service
 ##################################
 class MapNavigatorService(Node):
-    '''
-    A ROS2 Node that provides navigation services using the NavigateToPose action server.'''
+
     def __init__(self):
         super().__init__('map_navigator_service')
+
+        ##################################
+        # Callback Group
+        ##################################
         self.cb_group = ReentrantCallbackGroup()
         
-        self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
-        
-        self.current_yaw = None
-        
-        self.max_retries = 3
+        ##################################
+        # Class Variables
+        ################################## 
+        self.current_yaw = None             # Current yaw of the robot, updated from odometry
+        self.max_retries = 3                # Max attempts to send a navigation goal
         
         ##################################
-        # Subscriptions
+        # Subscription
         ##################################
-        
-        self.odom_sub = self.create_subscription(
-            Odometry,
-            'mobile_base_controller/odom',
-            self.odom_callback,
-            10,
-            callback_group=self.cb_group
-        )
+        self.odom_sub = self.create_subscription(Odometry, 'mobile_base_controller/odom', self.odom_callback, 10, callback_group=self.cb_group)
+
+        ##################################
+        # Publisher
+        ##################################
+        self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10, callback_group=self.cb_group)
         
         ##################################
         # Service Server
@@ -67,7 +66,7 @@ class MapNavigatorService(Node):
     # Callback
     ##################################
     
-    def odom_callback(self, msg: PoseStamped) -> None:
+    def odom_callback(self, msg: Odometry) -> None:
         """
         Callback function for odometry updates.
 
@@ -140,7 +139,6 @@ class MapNavigatorService(Node):
             self.get_logger().error("All attempts to send goal failed.")
             response.success = False
             return response
-       
         
         # Wait for the result
         result_future = goal_handle.get_result_async()
@@ -158,21 +156,25 @@ class MapNavigatorService(Node):
             
         return response
     
-    
-    def handle_rotate_360(self, request, response):
+    def handle_rotate_360(self, request, response) -> Trigger.Response:
         """
         Rotates the robot 360 degrees using open-loop velocity commands.
+
+        Parameters
+        ----------
+        request : Trigger.Request
+            The service request (not used).
+        response : Trigger.Response
+            The service response indicating success or failure of the rotation.
         """
         self.get_logger().info("Request received: Starting 360 rotation...")
 
         # Configuration
-        angular_speed = ANGULAR_SPEED  # rad/s
-        # Calculate duration: Full circle (2*PI) / speed
+        angular_speed = ANGULAR_SPEED
         target_duration = (2 * math.pi) / angular_speed
-        # Add a small buffer to ensure full coverage
         
         initial_yaw = self.current_yaw
-        angle_thresh = 0.1  # radians
+        angle_thresh = 0.1 
 
         # Create velocity message
         vel_msg = Twist()
@@ -206,6 +208,7 @@ class MapNavigatorService(Node):
         """
         vel_msg = Twist()
         self.cmd_vel_pub.publish(vel_msg)
+
 
 ##################################
 # Main Function
