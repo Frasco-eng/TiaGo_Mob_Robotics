@@ -1,7 +1,7 @@
 # Fdb version 3
-["pdflatex"] 1770663281 "/home/giulio/tiago_gh_ws/presentation/main.tex" "main.pdf" "main" 1770663287
+["pdflatex"] 1770675613 "/home/giulio/tiago_gh_ws/presentation/main.tex" "main.pdf" "main" 1770675620
   "/etc/texmf/web2c/texmf.cnf" 1770136115 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/home/giulio/tiago_gh_ws/presentation/main.tex" 1770658501 8807 a04211c0f4b63ee286963d74329170ca ""
+  "/home/giulio/tiago_gh_ws/presentation/main.tex" 1770675613 8817 0b9fd2a9dce2a74b05853aded42a9d2f ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/symbol/psyr.tfm" 1136768653 1408 5937f58aa508ea2cea4901c07d10f5fe ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/zapfding/pzdr.tfm" 1136768653 1528 f853c4d1b4e0550255e02831fdc8496f ""
@@ -262,14 +262,14 @@
   "Images//task2_state_machine.png" 1770650054 62367 333ecaef245f57780a355cce8d92b7d5 ""
   "Images//task3_manipulator.png" 1770474636 61619 4d2b771e276662ecf0c003746f6a6cc0 ""
   "Images//task3_state_machine.png" 1770474451 41743 a52e541a1b282e10a8ec5d9268118cbd ""
-  "main.aux" 1770663287 7553 3fadc09a36aefaf1159b608939b8dd87 "pdflatex"
-  "main.nav" 1770663287 3812 e0aa068645a4847bc210cc19606a7e21 "pdflatex"
-  "main.tex" 1770658501 8807 a04211c0f4b63ee286963d74329170ca ""
-  "main.toc" 1770663287 215 e0383c319dd0b68bd97c9f992c84f0b5 "pdflatex"
+  "main.aux" 1770675620 7553 3fadc09a36aefaf1159b608939b8dd87 "pdflatex"
+  "main.nav" 1770675620 3812 e0aa068645a4847bc210cc19606a7e21 "pdflatex"
+  "main.tex" 1770675613 8817 0b9fd2a9dce2a74b05853aded42a9d2f ""
+  "main.toc" 1770675620 215 e0383c319dd0b68bd97c9f992c84f0b5 "pdflatex"
   "slides/01_introduction.tex" 1770658729 4513 7827687a12d6b44489c4afa2f1397e6b ""
   "slides/02_task1.tex" 1770660892 5170 fc9cda0d6d43037d64e02ad884bbe034 ""
-  "slides/03_task2.tex" 1770662914 9128 e34a596bcc813d9b950ec30a844d0aa5 ""
-  "slides/04_task3.tex" 1770663281 12723 ab5efbe33db934391d17a8f8c02d23ab ""
+  "slides/03_task2.tex" 1770675575 9128 d38f331823f1831f3d70e241fe84a1e3 ""
+  "slides/04_task3.tex" 1770675454 12277 b6debe8f5085cb1d127a5b5b718f658e ""
   (generated)
   "main.aux"
   "main.log"

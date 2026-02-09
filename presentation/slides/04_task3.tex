@@ -137,7 +137,7 @@
 
 \begin{frame}{Task 3: Grasp \& Release Selection Pose}
     \begin{block}{Pose Calculation}
-        The Grasp Pose is computed by extracting the marker's transform. The choice of the grasping point has been made to ensure a stable grip on the cube, considering collinear and antipodal grasp for the 7cm cube.
+        The Grasp Pose is computed by extracting the marker's transform. The choice of the grasping point has been made to ensure a stable grip on the cube, considering \textbf{collinear} and \textbf{antipodal} grasp for the 7cm cube.
     \end{block}
 
     \begin{columns}[c]
@@ -183,22 +183,23 @@
         \end{enumerate}
     \end{alertblock}
     \textbf{Environmental Awareness:}
-    Upon arrival, \textbf{Collision Objects} representing the table (known dimensions) are spawned in MoveIt to forbid planning through the surface.
+    Upon arrival, \textbf{Collision Objects} representing the table are spawned in MoveIt to forbid planning through the surface.
 \end{frame}
 
 \begin{frame}{Task 3: Manipulation Safety \& Robustness (Cont.)}
-\begin{columns}
+    \vspace{1cm}
+    \begin{columns}
         \begin{column}{0.33\textwidth}
             \begin{figure}
                 \centering
-                \includegraphics[width=0.8\linewidth]{CubeExtraction.png}
+                \includegraphics[width=1\linewidth]{CubeExtraction.png}
                 \caption{Cube Extraction}
             \end{figure}
         \end{column}
         \begin{column}{0.33\textwidth}
             \begin{figure}
                 \centering
-                \includegraphics[width=0.8\linewidth]{ArmRetraction.png}
+                \includegraphics[width=1\linewidth]{ArmRetraction.png}
                 \caption{Arm Retraction}
             \end{figure}
         \end{column}
@@ -206,14 +207,14 @@
         \begin{column}{0.33\textwidth}
             \begin{figure}
                 \centering
-                \includegraphics[width=0.8\linewidth]{TorsoRetraction.png}
+                \includegraphics[width=1\linewidth]{TorsoRetraction.png}
                 \caption{Torso Retraction}
             \end{figure}
         \end{column}
     \end{columns}
 
     \vspace{0.5cm}
-    At the end of the manipulation operation the robot performs a \textit{backup} maneuver to reach a safe distance from the table before rotating.
+    At the end of the manipulation operation the robot performs a \textit{backup} maneuver to reach a \textbf{safe distance} from the table before rotating.
     
 \end{frame}
 
@@ -224,26 +225,17 @@
     
     \vspace{0.3cm}
 
-    \begin{columns}
-        \begin{column}{0.6\textwidth}
-            \textbf{The Logic:}
-            \begin{itemize}
-                \item The robot records the exact \textbf{base-to-table distance} ($d_{ref}$) during the successful Grasp phase
-                \item This distance is enforced as a constraint during the Placement phase to guarantee the \textbf{arm's kinematic reachability}
-            \end{itemize}
-        \end{column}
+    \textbf{The Logic:}
+    \begin{itemize}
+        \item The robot records the exact \textbf{base-to-table distance} ($d_{ref}$) during the successful Grasp phase
+        \item This distance is enforced as a constraint during the Placement phase to guarantee the \textbf{arm's kinematic reachability}
+    \end{itemize}
 
-        \begin{column}{0.4\textwidth}
-            \begin{alertblock}{Why?}
-                Reusing the grasp pose relative to the base minimizes Inverse Kinematics (IK) errors and ensures the object lands exactly on the table surface.
-            \end{alertblock}
-        \end{column}
-    \end{columns}
 
     \vspace{0.1cm}
 
     \begin{block}{Active Error Correction (Closed-Loop)}
-        Since AMCL localization has a margin of error ($>2cm$), the robot performs a final \textbf{Linear Approach/Backup} maneuver before placing: $$e = d_{real} - d_{ref}$$
+        To account for unpredictable navigation errors, the robot performs a final \textbf{Linear Approach/Backup} maneuver before placing: $$e = d_{real} - d_{ref}$$
         
         If $|e| > 1.0\text{cm}$: The base adjusts its position ($v_x = \pm 0.1 \text{m/s}$) until convergence.
     \end{block}
@@ -257,18 +249,18 @@
     \vspace{0.05em}
 
     \begin{columns}[c] % [t] aligns columns at the top
-        \begin{column}{0.5\textwidth}
-            \begin{block}{Attempt 1: Force Control (Failed)}
-                We initially attempted a realistic grasp based on Force/Torque sensor feedback:
+        \begin{column}{0.45\textwidth}
+            \begin{block}{Attempt: Force Control (Fail)}
+                Attempted a realistic grasp based on Force/Torque sensor feedback:
                 \begin{itemize}
                     \item \textbf{Tuning:} Adjusted friction coefficients ($\mu$) and contact compliance ($k_p, k_d$)
-                    \item \textbf{Logic:} Stop gripper closure upon reaching a force threshold ($F_{th} = 10\text{N}$)
+                    \item \textbf{Logic:} Stop gripper closure upon reaching a force threshold
                 \end{itemize}
                 \textit{Outcome: Proven unreliable due to physics engine instability}
             \end{block}
         \end{column}
 
-        \begin{column}{0.4\textwidth}
+        \begin{column}{0.45\textwidth}
             \begin{exampleblock}{Solution: Kinematic Locking}
                 To guarantee transport stability, we bypassed the physics engine using the \textbf{Link Attacher Plugin}.
                 \begin{itemize}
