@@ -955,6 +955,13 @@ class CoordinatorTask3(Node):
 
                             # Define release pose based on grasp transform
                             release_frame = kdl.Frame(self.base_T_marker)
+                            
+                            self.map_T_base = self.transform_stamped_to_kdl(self.tf_buffer.lookup_transform("map", self.base_link_frame_name, rclpy.time.Time()))
+                            
+                            self.map_T_marker = self.map_T_base * self.base_T_marker
+                            
+                            x_cube = self.map_T_marker.p[0]
+                            y_cube = self.map_T_marker.p[1]
 
                             # Raise Z by 10 cm for placing
                             release_frame.p[2] += 0.1 
@@ -962,9 +969,6 @@ class CoordinatorTask3(Node):
                             # Save release pose
                             release_pose = self.kdl_to_pose_msg(release_frame, self.base_link_frame_name)
                             self.cubes_to_pick[self.current_cube_idx].release_pose = release_pose
-                            
-                            x_cube = release_pose.pose.position.x
-                            y_cube = release_pose.pose.position.y
                             
                             self.generate_collision_object("ADD", "place_table", x_cube=x_cube, y_cube=y_cube, z_table=self.z_table)
 

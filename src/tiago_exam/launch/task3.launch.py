@@ -122,7 +122,6 @@ def launch_setup(context, *args, **kwargs):
     # Coordinates
     safe_coords = [0.0, -1.3, 0.0, 0.0]  
     coordinates = utils.map_pose_random_generator(map_path, safe_coords=safe_coords, clearance=1.0, task_name='task3')
-    coordinates = [-1.1, -4.0, 0.0, 3.14]
 
     ##############
     # Launch Descriptions

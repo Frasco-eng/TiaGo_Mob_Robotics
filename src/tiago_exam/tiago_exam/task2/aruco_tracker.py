@@ -39,7 +39,7 @@ class ArucoTracker(Node):
         ##################################
         self.head_pan_joint_name = "head_1_joint"
         self.head_tilt_joint_name = "head_2_joint"
-        self.approach_distance = 0.3    # Meters in front of the marker
+        self.approach_distance = 0.35    # Meters in front of the marker
 
         ##################################
         # State Variables
