@@ -120,7 +120,8 @@ class CoordinatorTask3(Node):
         ##################################
         # State Variables
         ##################################
-        self.current_state = State.INIT
+        self.current_state = State.INIT         # Current state of the state machine
+        self.debug_period = 1.0                 # Period for debug logging (in seconds)
 
         ##################################
         # Navigation Variables
@@ -130,6 +131,7 @@ class CoordinatorTask3(Node):
         self.ref_distance_to_table = None       # Reference distance from the robot to the table (measured at the pick location)
         self.approach_threshold = 0.01          # Approach - Backup threshold
         self.backup_threshold = 0.15            # Buckup threshold to leave the station after pick/place
+        self.home_pose = None                   # Home Pose 
         
         ##################################
         # Head Movement Variables
@@ -158,27 +160,17 @@ class CoordinatorTask3(Node):
             'qx': None, 'qy': None, 'qz': None, 'qw': None,
             'size': [0.5, 0.7, 0.01]
         }
-        
-        
-        self.latest_camera_T_marker: Optional[kdl.Frame] = None
-        self.latest_aruco_frame: Optional[TransformStamped] = None
-
-        self.base_T_marker: Optional[kdl.Frame] = None
-
-        self.home_pose = None
-        
-        self.debug_period = 1.0
-        
-        
-
-        self.detection_start_time = None
-        
+                      
         ##################################
         # Cubes Variables
         ##################################
-        self.cubes_id = [63, 582]                       # List of cube marker IDs to pick
-        self.current_cube_idx = 0                       # The cube index currently being processed
-        self.cubes_to_pick: List[CubeLocation] = []     # List of cubes to pick and place
+        self.cubes_id = [63, 582]                                   # List of cube marker IDs to pick
+        self.current_cube_idx = 0                                   # The cube index currently being processed
+        self.cubes_to_pick: List[CubeLocation] = []                 # List of cubes to pick and place
+        self.latest_camera_T_marker: Optional[kdl.Frame] = None     # Latest transformation from camera to marker (updated with each detection)
+        self.latest_aruco_frame: Optional[TransformStamped] = None  # Latest ArUco marker pose in the camera frame (updated with each detection)
+        self.base_T_marker: Optional[kdl.Frame] = None              # Base to Marker tf transformation
+        self.detection_start_time = None                            # Timestamp when the system started looking for the marker (used for timeout)
         
         ##################################
         # Station Locations
@@ -247,11 +239,11 @@ class CoordinatorTask3(Node):
         if self.cubes_id[self.current_cube_idx] == marker_id:
             self.latest_aruco_frame = msg 
             
-            
     def nav_response_callback(self, future) -> None:
         '''
         Callback function for navigation service response.
         Updates the navigation outcome based on the service response.
+
         Parameters
         ----------
         future : Future
@@ -274,6 +266,7 @@ class CoordinatorTask3(Node):
         '''
         Callback function for move head service response.
         Updates the move head outcome based on the service response.
+
         Parameters
         ----------
         future : Future
@@ -333,6 +326,7 @@ class CoordinatorTask3(Node):
     def call_send_nav_goal_srv(self, goal: PoseStamped) -> None:
         '''
         Call the navigation service to send a navigation goal.
+
         Parameters
         ----------
         goal : PoseStamped
@@ -353,6 +347,7 @@ class CoordinatorTask3(Node):
     def call_move_head_srv(self, pan: float, tilt: float) -> None:
         '''
         Call the move head service to position the robot's head.
+
         Parameters
         ----------
         pan : float
@@ -373,6 +368,7 @@ class CoordinatorTask3(Node):
     def call_send_manip_goal_srv(self, type_cmd: str, frame: kdl.Frame) -> None:
         '''
         Call the manipulator command service to send a manipulator command.
+
         Parameters
         ----------
         type_cmd : str
@@ -380,7 +376,6 @@ class CoordinatorTask3(Node):
         frame : kdl.Frame
             The target frame for the manipulator command.
         '''
-        
         # Create a request
         req = ManipulatorCommand.Request()
 
@@ -430,13 +425,13 @@ class CoordinatorTask3(Node):
         '''
         self.get_logger().info(f"--- COORDINATOR STATE ---: {self.current_state.name}")
         
-    
     ##################################
     # Methods
     ##################################
     def load_station_locations(self):
         """
-        Load station locations from CSV file
+        Load station locations from CSV file.
+        It also store the pick and place surface location and orientation for the collision object generation.
         """
         try:
             with open(self.marker_file_path, 'r') as f:
@@ -501,20 +496,23 @@ class CoordinatorTask3(Node):
         except Exception as e:
             self.get_logger().error(f'Failed to load station locations: {e}')
     
-    def save_home_pose(self):
+    def save_home_pose(self) -> None:
+        '''
+        Save the origin robot pose as the home pose.
+        '''
         self.home_pose = PoseStamped()
         self.home_pose.header.stamp = self.get_clock().now().to_msg()
         self.home_pose.header.frame_id = 'map'
         self.home_pose.pose.orientation.w = 1.0
     
-    def get_transformed_aruco_pose_stamped(self):
+    def get_transformed_aruco_pose_stamped(self) -> Optional[PoseStamped]:
         '''
         Transform the latest detected ArUco marker pose to the base_link frame.
 
         Returns
         -------
-            Aruco pose : PoseStamped  
-                The transformed pose in the base_link frame, or None if transformation fails.
+        Aruco pose : PoseStamped  
+            The transformed pose in the base_link frame, or None if transformation fails.
         '''
         if self.latest_aruco_frame is None:
             return None
@@ -560,11 +558,14 @@ class CoordinatorTask3(Node):
         t.transform.rotation = pose_to_publish.pose.orientation
         self.tf_broadcaster.sendTransform(t)
 
-    def get_base_T_marker_frame(self):
+    def get_base_T_marker_frame(self) -> Optional[kdl.Frame]:
         '''
         Compute the transformation from base_link to the detected ArUco marker.
-        Returns:
-            kdl.Frame: The transformation from base_link to the marker, or None if transformation fails.
+
+        Returns
+        -------
+        kdl.Frame
+            The transformation from base_link to the marker, or None if transformation fails.
         '''
 
         try:
@@ -592,6 +593,19 @@ class CoordinatorTask3(Node):
         return base_T_marker
     
     def get_map_goal_pose(self, location: str) -> PoseStamped:
+        '''
+        Docstring for get_map_goal_pose
+        
+        Parameters
+        ----------
+        location : str
+            The location for which to get the goal pose ('pick' or 'place').
+
+        Returns
+        -------
+        PoseStamped
+            The goal pose in the map frame corresponding to the specified location.
+        '''
         goal = PoseStamped()
         goal.header.frame_id = 'map'
 
@@ -609,6 +623,16 @@ class CoordinatorTask3(Node):
     def get_distance_from_base(self, target_frame_id: str) -> Optional[float]:
         """
         Calculate the Euclidean distance (only XY) between base_link and the target frame.
+
+        Parameters
+        ----------
+        target_frame_id : str
+            The frame ID of the target to which the distance should be calculated.
+
+        Returns
+        -------
+        float
+            The Euclidean distance in the XY plane from base_link to the target frame, or None if transformation fails.
         """
         try:
             # Look up the transform: base_link -> target_frame
@@ -625,26 +649,45 @@ class CoordinatorTask3(Node):
             dist = math.sqrt(dx**2 + dy**2)
             return dist
         except Exception as e:
-            self.get_logger().warn(f"Impossible to compute distance from base to {target_frame_id}: {e}")
+            self.get_logger().warning(f"Impossible to compute distance from base to {target_frame_id}: {e}")
             return None
         
     def generate_collision_object(self, command: str, object_id: str, x_cube:float, y_cube:float, z_table:float) -> None:
+        '''
+        Generate a collision object for the table at the pick or place location.
+
+        Parameters
+        ----------
+        command : str
+            The command for the collision object service ('ADD' or 'REMOVE').
+        object_id : str
+            The ID of the collision object ('pick_table' or 'place_table').
+        x_cube : float
+            The x coordinate of the cube (used to position the collision object).
+        y_cube : float
+            The y coordinate of the cube (used to position the collision object).
+        z_table : float
+            The z coordinate of the table (used to position the collision object).
+        '''
         table_pose = PoseStamped()
         table_pose.header.frame_id = "base_link"
         table_pose.header.stamp = self.get_clock().now().to_msg()
 
         if 'pick' in object_id:
+            # Marker Position
             temp_marker_x = self.world_pick_surface['x']
             temp_marker_y = self.world_pick_surface['y']
+
+            # Update the collision object position to be between the marker and the cube
             self.world_pick_surface['x'] = (x_cube + self.world_pick_surface['x'])/2
             self.world_pick_surface['y'] = (y_cube + self.world_pick_surface['y'])/2
-            
+
+            # Update the collision object size to cover the area between the marker and the cube
             self.world_pick_surface['size'][2] = np.sqrt((temp_marker_x - x_cube)**2 + (temp_marker_y - y_cube)**2)
             
-            
+            # Update the collision object height to cover the area between the table and the cube
             self.world_pick_surface['size'][0] = (z_table - self.world_pick_surface['z'])*2
             data = self.world_pick_surface
-            obj_id = "pick_table"
         elif 'place' in object_id:
             temp_marker_x = self.world_place_surface['x']
             temp_marker_y = self.world_place_surface['y']
@@ -655,11 +698,11 @@ class CoordinatorTask3(Node):
             
             self.world_place_surface['size'][0] = (z_table - self.world_place_surface['z'])*2
             data = self.world_place_surface
-            obj_id = "place_table"
         else:
             self.get_logger().error(f"Unknown table type: {object_id}")
             return
-
+        
+        # Obtain the collision table pose in map frame
         map_pose = PoseStamped()
         map_pose.header.frame_id = "map"
         map_pose.header.stamp = self.get_clock().now().to_msg()
@@ -698,20 +741,32 @@ class CoordinatorTask3(Node):
         self.call_send_collision_object_srv(command, object_id, position, quat_xyzw, table_size)
     
     def remove_collision_object(self, object_id: str) -> None:
+        '''
+        Remove the collision object for the table.
+
+        Parameters
+        ----------
+        object_id : str
+            The ID of the collision object to remove ('pick_table' or 'place_table').
+        '''
         self.call_send_collision_object_srv("REMOVE", object_id)
 
-    def run_forward(self):
+    def run_forward(self) -> None:
+        '''
+        Publish a forward velocity command to the robot.
+        '''
         cmd = Twist()
         cmd.linear.x = 0.1
         self.cmd_vel_pub.publish(cmd)
     
-    def run_backward(self):
+    def run_backward(self) -> None:
+        '''
+        Publish a backward velocity command to the robot.
+        '''
         cmd = Twist()
         cmd.linear.x = -0.1
         self.cmd_vel_pub.publish(cmd)
 
-
-        
     ##################################
     # STATE MACHINE
     ##################################   
